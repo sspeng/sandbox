@@ -14,6 +14,7 @@
       Dennis Nadeau."
  */
 
+#include <getopt.h>
 #include <math.h>
 #include <netcdf_par.h> // must be included before netcdf.h
 #include <netcdf.h>
@@ -25,11 +26,12 @@
 #define NUM_FACC 2
 #define NUM_CACHE_SIZES 3
 #define NUM_CHUNK_COMBOS 3
-#define NUM_TRIES 3
 #define MEGABYTE 1048576
 #define XDIM 0
 #define YDIM 1
 #define TDIM 2
+#define MAXVARS 32
+#define ROW_FORMAT "%9s | %11s | %10s | %16s | %16s | %16s\n"
 
 int GetLocalBounds(int gwidth, int gheight, int rank, int size, 
 		   int* x, int* y, int* width, int* height)
@@ -92,24 +94,24 @@ int GetLocalBounds(int gwidth, int gheight, int rank, int size,
 
 int TestWrite(size_t cachesize, int facctype, int accessflag, size_t* chunksize,
 	      MPI_Comm comm, MPI_Info info, int mpisize, int mpirank, 
-	      float* data, int x, int y, int width, int height, int tlen,
-	      int gwidth, int gheight)
+	      float* data, int x, int y, int width, int height, int tlen, 
+	      int nvars, int ntries, int gwidth, int gheight)
 {
   int retval = 0;
   size_t nelems_in;
   float preemption_in;
   int ncid;
-  int varid;
+  int varid[MAXVARS];
   int ncresult = NC_NOERR;
   int dimids[3];
   size_t start[3];
   size_t count[3];
   double starttime = 0.0;
-  double endtime = 0.0;
   double writetime = 0.0;
   double bandwidth = 0.0;
-  int try, t;
+  int try, t, v;
   char filename[NC_MAX_NAME + 1];
+  char varname[NC_MAX_NAME + 1];
 
   // Set the cache size
   if((ncresult = nc_get_chunk_cache(NULL, &nelems_in, &preemption_in)) ||
@@ -120,9 +122,9 @@ int TestWrite(size_t cachesize, int facctype, int accessflag, size_t* chunksize,
     retval = 1;
   }
 
-  for(try = 0; try < NUM_TRIES; try++)
+  for(try = 0; try < ntries; try++)
   {  
-    sprintf(filename, "outfile.%02d.nc", try);
+    sprintf(filename, "outfile.t%02d.nc", try);
     // Create a netcdf-4 file, opened for parallel I/O
     if(ncresult = nc_create_par(filename, facctype|NC_NETCDF4, comm, info, &ncid))
     {
@@ -141,24 +143,29 @@ int TestWrite(size_t cachesize, int facctype, int accessflag, size_t* chunksize,
       retval = 1;
     }
     
-    // Create our variables
-    if(ncresult = nc_def_var(ncid, "var", NC_FLOAT, 3, dimids, &varid))
+    for(v = 0; v < nvars; v++)
     {
-      printf("Failed to create variable: ncresult=%d, mpirank=%d\n",
-	     ncresult, mpirank);
-      retval = 1;
+      sprintf(varname, "var%02d", v);
+
+      // Create our variables
+      if(ncresult = nc_def_var(ncid, varname, NC_FLOAT, 3, dimids, &varid[v]))
+      {
+	printf("Failed to create variable \"%s\": ncresult=%d, mpirank=%d\n",
+	       varname, ncresult, mpirank);
+	retval = 1;
+      }
+      
+      // Set the chunk size
+      if(chunksize[0])
+      {
+	if(ncresult = nc_def_var_chunking(ncid, varid[v], 0, chunksize))
+	{
+	  printf("Failed to set chunk size to %dx%dx%d: ncresult=%d, mpirank=%d\n",
+		 chunksize[0], chunksize[1], chunksize[2], ncresult, mpirank);
+	  retval = 1;
+	}
+      }
     }
-    
-    // Set the chunk size
-    /* if(chunksize[0]) */
-    /* { */
-    /*   if(ncresult = nc_def_var_chunking(ncid, varid, 0, chunksize)) */
-    /*   { */
-    /* 	printf("Failed to set chunk size to %dx%dx%d: ncresult=%d, mpirank=%d\n", */
-    /* 	       chunksize[0], chunksize[1], chunksize[2], ncresult, mpirank); */
-    /* 	retval = 1; */
-    /*   } */
-    /* } */
     
     if(ncresult = nc_enddef(ncid))
     {
@@ -179,21 +186,24 @@ int TestWrite(size_t cachesize, int facctype, int accessflag, size_t* chunksize,
       count[YDIM] = height;
       count[TDIM] = 1;
       
-      if(ncresult = nc_var_par_access(ncid, varid, accessflag))
-      {
-	printf("nc_var_par_access failed: ncresult=%d, mpirank=%d\n",
-	       ncresult, mpirank);
-	retval = 1;
-      }
-      
       starttime = MPI_Wtime();
-      
-      // Write as slice of data
-      if(ncresult = nc_put_vara_float(ncid, varid, start, count, data))
+
+      for(v = 0; v < nvars; v++)
       {
-	printf("nc_put_vara_float failed: ncresult=%d, mpirank=%d\n",
-	       ncresult, mpirank);
-	retval = 1;
+	if(ncresult = nc_var_par_access(ncid, varid[v], accessflag))
+	{
+	  printf("nc_var_par_access failed: ncresult=%d, mpirank=%d\n",
+		 ncresult, mpirank);
+	  retval = 1;
+	}
+	
+	// Write as slice of data
+	if(ncresult = nc_put_vara_float(ncid, varid[v], start, count, data))
+	{
+	  printf("nc_put_vara_float failed: ncresult=%d, mpirank=%d\n",
+		 ncresult, mpirank);
+	  retval = 1;
+	}
       }
 
       // Use a barrier to keep the processes more or less in step, as this will
@@ -210,34 +220,34 @@ int TestWrite(size_t cachesize, int facctype, int accessflag, size_t* chunksize,
       retval = 1;
     }
     
-    endtime = MPI_Wtime();
-    
-    if(0 == mpirank) 
-    {
-      bandwidth += ((sizeof(float) * width * height * tlen) / 
-		    ((endtime - starttime) * MEGABYTE)) / NUM_TRIES;
-      writetime += (endtime - starttime) / NUM_TRIES;
-    }
+    writetime += MPI_Wtime() - starttime;
   }
+
+  writetime /= ntries;
+  bandwidth = sizeof(float) * gwidth * gheight * tlen * nvars / MEGABYTE / writetime;
     
   if(0 == mpirank)
   {
-    char chunkstring[NC_MAX_NAME + 1] = "";
+    char mpimode_col[32];
+    char access_col[32];
+    char cache_col[32];
+    char chunksize_col[32];
+    char writetime_col[32];
+    char bandwidth_col[32];
     
-    /* What was our chunking? */
+    sprintf(mpimode_col, "%s", facctype == NC_MPIIO ? "MPI-IO" : "MPI-POSIX");
+    sprintf(access_col, "%s", accessflag == NC_INDEPENDENT ? "independent" : "collective");
+    sprintf(cache_col, "%d", (int)cachesize / MEGABYTE);
     if (chunksize[0])
-      sprintf(chunkstring, "%dx%dx%d ", 
+      sprintf(chunksize_col, "%dx%dx%d", 
 	      (int)chunksize[0], (int)chunksize[1], (int)chunksize[2]);
     else
-      strcat(chunkstring, "contiguous");
-    
-    /* Print the results. */
-    printf("%d\t\t%s\t%s\t%d\t\t%d(%d)x%d(%d)x%d\t\t%s\t%f\t\t%f\t\t\t%d\n", 
-	   mpisize, 
-	   (facctype == NC_MPIIO ? "MPI-IO   " : "MPI-POSIX"), 
-	   (accessflag == NC_INDEPENDENT ? "independent" : "collective"), 
-	   (int)cachesize/MEGABYTE, gwidth, width, gheight, height, tlen, chunkstring, 
-	   writetime, bandwidth, NUM_TRIES);
+      sprintf(chunksize_col, "contiguous");
+    sprintf(writetime_col, "%f", writetime);
+    sprintf(bandwidth_col, "%f", bandwidth);
+
+    printf(ROW_FORMAT, mpimode_col, access_col, cache_col, chunksize_col, 
+	   writetime_col, bandwidth_col);
   }
   
   return retval;
@@ -255,25 +265,40 @@ int main(int argc, char* argv[])
   int facctype[NUM_FACC] = {NC_INDEPENDENT, NC_COLLECTIVE};
   size_t cachesize[NUM_CACHE_SIZES] = {MEGABYTE, 32 * MEGABYTE, 64 * MEGABYTE};
   size_t chunksize[NUM_CHUNK_COMBOS][3] = {{0, 0, 0}, 
-					   {0, 0, 0},
-					   {0, 0, 0}};
+					   {gwidth, gheight, 1},
+					   {32, 32, 1}};
   int m, f, c, i;
   float* data = 0;
   int x, y, width, height;
+  int tlen = 10;
+  int nvars = 6;
+  int ntries = 3;
+  char opt;
   
   MPI_Init(&argc, &argv);
   MPI_Comm_size(comm, &mpisize);
   MPI_Comm_rank(comm, &mpirank);
 
-  chunksize[1][XDIM] = gwidth; 
+  while((c = getopt(argc, argv, "h:i:t:v:w:")) != -1)
+  {
+    switch(c)
+    {
+    case 'h': // Height of full grid (number of rows)
+      gheight = atoi(optarg); break;
+    case 'i': // Number of tries that we will average to calculate stats
+      ntries = atoi(optarg); break;
+    case 't': // Number of time steps
+      tlen = atoi(optarg);
+    case 'v': // Number of variables
+      nvars = atoi(optarg);
+    case 'w': // Width of full grid (number of columns)
+      gwidth = atoi(optarg);
+    }
+  }
+
+  chunksize[1][XDIM] = gwidth;
   chunksize[1][YDIM] = gheight;
   chunksize[1][TDIM] = 1;
-
-  // This is a good chunk size for proc 0, but not all procs necessarily have
-  // the same dimensions, so it will be hard to set a good chunk size for all
-  chunksize[2][XDIM] = 32; 
-  chunksize[2][YDIM] = 32;
-  chunksize[2][TDIM] = 1;
 
   // Initialize our local grid and fill it up with simple data
   GetLocalBounds(gwidth, gheight, mpirank, mpisize, &x, &y, &width, &height);
@@ -284,17 +309,34 @@ int main(int argc, char* argv[])
 
   if(0 == mpirank)
   {
-    printf("num_proc\tMPI mode\taccess\t\tcache (MB)\tgrid size\tchunks\tavg. write time(s)\t"
-	   "avg. write bandwidth(MB/s)\tnum_tries\n");
+    printf("Running tests on %d processes\n", mpisize);
+    printf("Write Time and Bandwidth values are averages over %d tries\n", ntries);
+    printf("The grid size is %dx%d\n", gwidth, gheight);
+    
+    for(i = 0; i < mpisize; i++)
+    {
+      int px, py, pw, ph;
+      GetLocalBounds(gwidth, gheight, i, mpisize, &px, &py, &pw, &ph);
+      printf("Process %d manages the local grid: x=%4d, y=%4d, width=%4d, height=%4d\n",
+	     i, px, py, pw, ph);
+    }
+    
+    printf("Writing %d time slices for %d variables\n", tlen, nvars);
+    printf("\n");
+    
+    printf(ROW_FORMAT, "MPI Mode", "Access", "Cache (MB)", 
+	   "Chunk Size", "Write Time (s)", "Bandwidth (MB/s)");
+    printf(ROW_FORMAT, "---------", "-----------", "----------", 
+	   "----------------", "----------------", "----------------");
   }
   
-  for (i = 0; i < NUM_CACHE_SIZES; i++)
-    for (m = 0; m < NUM_MODES; m++)
-      for (f = 0; f < NUM_FACC; f++)
+  for (m = 0; m < NUM_MODES; m++)
+    for (f = 0; f < NUM_FACC; f++)
+      for (i = 0; i < NUM_CACHE_SIZES; i++)
 	for (c = 0; c < NUM_CHUNK_COMBOS; c++)
 	  TestWrite(cachesize[i], mpimode[m], facctype[f], chunksize[c], 
 		    comm, info, mpisize, mpirank, 
-		    data, x, y, width, height, 10, gwidth, gheight);
+		    data, x, y, width, height, tlen, nvars, ntries, gwidth, gheight);
 
   return 0;
 }
