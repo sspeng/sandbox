@@ -288,11 +288,11 @@ int main(int argc, char* argv[])
     case 'i': // Number of tries that we will average to calculate stats
       ntries = atoi(optarg); break;
     case 't': // Number of time steps
-      tlen = atoi(optarg);
+      tlen = atoi(optarg); break;
     case 'v': // Number of variables
-      nvars = atoi(optarg);
+      nvars = atoi(optarg); break;
     case 'w': // Width of full grid (number of columns)
-      gwidth = atoi(optarg);
+      gwidth = atoi(optarg); break;
     }
   }
 
