@@ -221,6 +221,8 @@ int TestWrite(size_t cachesize, int facctype, int accessflag, size_t* chunksize,
     }
     
     writetime += MPI_Wtime() - starttime;
+
+    remove(filename);
   }
 
   writetime /= ntries;
