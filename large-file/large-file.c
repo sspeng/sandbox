@@ -19,10 +19,10 @@
 #define NDIMS 4
 #define XNAME "x"
 #define XDIM 1
-#define XSIZE 1000
+#define XSIZE 2000
 #define YNAME "y"
 #define YDIM 2
-#define YSIZE 1000
+#define YSIZE 2000
 #define ZNAME "z"
 #define ZDIM 3
 #define ZSIZE 1000
@@ -166,24 +166,17 @@ int main(int argc, char* argv[])
 
   if(! mpirank) printf("Setting up dimensions...\n");
 
-  ncresult = ncmpi_def_dim(ncid, TNAME, 1, &dimid[TDIM]);
+  ncresult = ncmpi_def_dim(ncid, TNAME, NC_UNLIMITED, &dimid[TDIM]);
   ncerror("ncmpi_def_dim", ncresult);
 
   ncresult = ncmpi_def_var(ncid, TNAME, NC_DOUBLE, 1, &dimid[TDIM], &tvarid);
   ncerror("ncmpi_def_var", ncresult);
 
+  if(! mpirank) printf("Writing t...\n");
   ncmpi_enddef(ncid);
-  ncmpi_begin_indep_data(ncid);
-
-  if(! mpirank)
-  {
-    printf("Writing t...\n");
-    start[0] = 0;  count[0] = 1;
-    ncresult = ncmpi_put_vara_double(ncid, tvarid, start, count, &t);
-    ncerror("ncmpi_put_var (t)", ncresult);
-  }
-
-  ncmpi_end_indep_data(ncid);
+  start[0] = 0;  count[0] = 1;
+  ncresult = ncmpi_put_vara_double_all(ncid, tvarid, start, count, &t);
+  ncerror("ncmpi_put_var (t)", ncresult);
   ncmpi_redef(ncid);
 
   ncresult = ncmpi_def_dim(ncid, XNAME, XSIZE, &dimid[XDIM]);  
@@ -218,17 +211,10 @@ int main(int argc, char* argv[])
   ncresult = ncmpi_def_var(ncid, ZNAME, NC_DOUBLE, 1, &dimid[ZDIM], &zvarid);
   ncerror("ncmpi_def_var", ncresult);
 
+  if(! mpirank) printf("Writing z...\n");
   ncmpi_enddef(ncid);
-  ncmpi_begin_indep_data(ncid);
-
-  if(! mpirank)
-  {
-    printf("Writing z...\n");
-    ncresult = ncmpi_put_var_double(ncid, zvarid, z);
-    ncerror("ncmpi_put_var (z)", ncresult);
-  }
-
-  ncmpi_end_indep_data(ncid);
+  ncresult = ncmpi_put_var_double_all(ncid, zvarid, z);
+  ncerror("ncmpi_put_var (z)", ncresult);
   ncmpi_redef(ncid);
 
   if(! mpirank) printf("Defining variables...\n");
@@ -296,7 +282,7 @@ int main(int argc, char* argv[])
 
   if(! mpirank) printf("Setting up dimensions...\n");
 
-  ncresult = ncmpi_def_dim(ncid, TNAME, 1, &dimid[TDIM]);
+  ncresult = ncmpi_def_dim(ncid, TNAME, NC_UNLIMITED, &dimid[TDIM]);
   ncerror("ncmpi_def_dim", ncresult);
 
   ncresult = ncmpi_def_dim(ncid, XNAME, XSIZE, &dimid[XDIM]);  
@@ -332,34 +318,27 @@ int main(int argc, char* argv[])
   ncmpi_enddef(ncid);
 
   if(! mpirank) printf("Writing data...\n");
-
-  ncmpi_begin_indep_data(ncid);
-
-  if(! mpirank)
-  {
-    printf("Writing t...\n");
-    start[0] = 0;  count[0] = 1;
-    ncresult = ncmpi_put_vara_double(ncid, tvarid, start, count, &t);
-    ncerror("ncmpi_put_var (t)", ncresult);
-
-    printf("Writing z...\n");
-    ncresult = ncmpi_put_var_double(ncid, zvarid, z);
-    ncerror("ncmpi_put_var (z)", ncresult);
-  }
-
-  ncmpi_end_indep_data(ncid);
-
+  
   if(! mpirank) printf("Writing x...\n");
   ncmpi_enddef(ncid);
   start[0] = localx;  count[0] = localwidth;
   ncresult = ncmpi_put_vara_double_all(ncid, xvarid, start, count, x);
-  ncerror("ncmpi_put_vara_all (x)", ncresult);
+  ncerror("ncmpi_put_vara_double_all (x)", ncresult);
 
   if(! mpirank) printf("Writing y...\n");
   ncmpi_enddef(ncid);
   start[0] = localy;  count[0] = localheight;
   ncresult = ncmpi_put_vara_double_all(ncid, yvarid, start, count, y);
-  ncerror("ncmpi_put_vara_all (y)", ncresult);
+  ncerror("ncmpi_put_vara_double_all (y)", ncresult);
+  
+  if(! mpirank) printf("Writing z...\n");
+  ncresult = ncmpi_put_var_double_all(ncid, zvarid, z);
+  ncerror("ncmpi_put_var_double_all (z)", ncresult);
+
+  if(! mpirank) printf("Writing t...\n");
+  start[0] = 0;  count[0] = 1;
+  ncresult = ncmpi_put_vara_double_all(ncid, tvarid, start, count, &t);
+  ncerror("ncmpi_put_vara_double_all (t)", ncresult);
 
   for(i = 0; i < NVARS; i++)
   {
@@ -376,13 +355,13 @@ int main(int argc, char* argv[])
     count[TDIM] = 1;
 
     ncresult = ncmpi_put_vara_double_all(ncid, varid[i], start, count, data);
-    ncerror("ncmpi_put_vara_double", ncresult);
+    ncerror("ncmpi_put_vara_double_all", ncresult);
   }
 
   elapsed = MPI_Wtime() - starttime;
 
   if(! mpirank) printf("Done.  %f s\n", elapsed);
-
+  
   free(data);
   MPI_Finalize();
 
