@@ -121,8 +121,10 @@ int main(int argc, char* argv[])
       tempx = x[ix];
       tempy = y[iy];
       pj_transform(pj_pism, pj_wgs84, 1, 1, &tempx, &tempy, NULL);
-      lon[iy * xlen + ix] = tempx / DEG_TO_RAD;
-      lat[iy * xlen + ix] = tempy / DEG_TO_RAD;
+      lon[ix*ylen + iy] = tempx / DEG_TO_RAD;
+      lat[ix*ylen + iy] = tempy / DEG_TO_RAD;
+      //lon[iy * xlen + ix] = tempx / DEG_TO_RAD;
+      //lat[iy * xlen + ix] = tempy / DEG_TO_RAD;
     }
   }
 
