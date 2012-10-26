@@ -5,34 +5,27 @@
    without all of the confusion associated with PISM.
  */
 
-#include <getopt.h>
 #include <math.h>
-#include <netcdf.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <netcdf_par.h>
+#include <netcdf.h>
 
 #define NVARS 4
 #define NDIMS 4
 #define XNAME "x"
 #define XDIM 1
-#define XSIZE 1200
+#define XSIZE 600
 #define YNAME "y"
 #define YDIM 2
-#define YSIZE 1200
+#define YSIZE 600
 #define ZNAME "z"
 #define ZDIM 3
-#define ZSIZE 1000
+#define ZSIZE 301
 #define TNAME "t"
 #define TDIM 0
-
-
-MPI_Comm g_mpicomm;
-MPI_Info g_mpiinfo;
-int g_mpirank;
-int g_mpisize;
-double *g_data, *g_x, *g_y, *g_z, g_t;
-int g_localx, g_localy, g_localwidth, g_localheight;
 
 
 int ncerror(const char* function, int result)
@@ -40,132 +33,9 @@ int ncerror(const char* function, int result)
   if(result)
   {
     fprintf(stderr, "NetCDF function \"%s\" failed with \"%s\"\n",
-	    function, ncmpi_strerror(result));
+	    function, nc_strerror(result));
     exit(1);
   }
-
-  return 0;
-}
-
-int DoPismyWrite(const char* filename)
-{
-  int ncresult;
-  int ncid;
-  int varid[NVARS], xvarid, yvarid, zvarid, tvarid;
-  int dimid[NDIMS];
-  MPI_Offset start[NDIMS], count[NDIMS];
-  double starttime, elapsed;
-  char varname[32];
-  int i;
-
-  if(! g_mpirank) printf("Beginning tests of pism-ish write\n");
-  starttime = MPI_Wtime();
-
-  if(! g_mpirank) printf("Creating NetCDF file...\n");
-
-  ncresult = ncmpi_create(g_mpicomm, filename, NC_64BIT_DATA, g_mpiinfo, &ncid);
-  ncerror("ncmpi_create", ncresult);
-
-  if(! g_mpirank) printf("Setting up dimensions...\n");
-
-  ncresult = ncmpi_def_dim(ncid, TNAME, NC_UNLIMITED, &dimid[TDIM]);
-  ncerror("ncmpi_def_dim", ncresult);
-
-  ncresult = ncmpi_def_var(ncid, TNAME, NC_DOUBLE, 1, &dimid[TDIM], &tvarid);
-  ncerror("ncmpi_def_var", ncresult);
-
-  if(! g_mpirank) printf("Writing t...\n");
-  ncmpi_enddef(ncid);
-  start[0] = 0;  count[0] = 1;
-  ncresult = ncmpi_put_vara_double_all(ncid, tvarid, start, count, &g_t);
-  ncerror("ncmpi_put_var (t)", ncresult);
-  ncmpi_redef(ncid);
-
-  ncresult = ncmpi_def_dim(ncid, XNAME, XSIZE, &dimid[XDIM]);  
-  ncerror("ncmpi_def_dim", ncresult);
-
-  ncresult = ncmpi_def_var(ncid, XNAME, NC_DOUBLE, 1, &dimid[XDIM], &xvarid);
-  ncerror("ncmpi_def_var", ncresult);
-
-  if(! g_mpirank) printf("Writing x...\n");
-  ncmpi_enddef(ncid);
-  start[0] = g_localx;  count[0] = g_localwidth;
-  ncresult = ncmpi_put_vara_double_all(ncid, xvarid, start, count, g_x);
-  ncerror("ncmpi_put_vara_all (x)", ncresult);
-  ncmpi_redef(ncid);
-
-  ncresult = ncmpi_def_dim(ncid, YNAME, YSIZE, &dimid[YDIM]);  
-  ncerror("ncmpi_def_dim", ncresult);
-
-  ncresult = ncmpi_def_var(ncid, YNAME, NC_DOUBLE, 1, &dimid[YDIM], &yvarid);
-  ncerror("ncmpi_def_var", ncresult);
-
-  if(! g_mpirank) printf("Writing y...\n");
-  ncmpi_enddef(ncid);
-  start[0] = g_localy;  count[0] = g_localheight;
-  ncresult = ncmpi_put_vara_double_all(ncid, yvarid, start, count, g_y);
-  ncerror("ncmpi_put_vara_all (y)", ncresult);
-  ncmpi_redef(ncid);
-
-  ncresult = ncmpi_def_dim(ncid, ZNAME, ZSIZE, &dimid[ZDIM]);  
-  ncerror("ncmpi_def_dim", ncresult);
-
-  ncresult = ncmpi_def_var(ncid, ZNAME, NC_DOUBLE, 1, &dimid[ZDIM], &zvarid);
-  ncerror("ncmpi_def_var", ncresult);
-
-  if(! g_mpirank) printf("Writing z...\n");
-  ncmpi_enddef(ncid);
-  ncresult = ncmpi_put_var_double_all(ncid, zvarid, g_z);
-  ncerror("ncmpi_put_var (z)", ncresult);
-  ncmpi_redef(ncid);
-
-  if(! g_mpirank) printf("Defining variables...\n");
-  
-  for(i = 0; i < NVARS; i++)
-  {
-    sprintf(varname, "var%02d", i);
-    ncresult = ncmpi_def_var(ncid, varname, NC_DOUBLE, NDIMS, dimid, &varid[i]);
-    ncerror("ncmpi_def_var", ncresult);
-  }
-
-  if(! g_mpirank) printf("Closing...\n");
-
-  ncresult = ncmpi_close(ncid);
-  ncerror("ncmpi_close", ncresult);
-
-  for(i = 0; i < NVARS; i++)
-  {
-    if(! g_mpirank) printf("Openning...\n");
-
-    ncresult = ncmpi_open(g_mpicomm, filename, NC_WRITE, g_mpiinfo, &ncid);
-    ncerror("ncmpi_open", ncresult);
-
-    ncmpi_enddef(ncid);
-    
-    if(! g_mpirank) printf("Writing data...\n");
-
-    start[XDIM] = g_localx; 
-    start[YDIM] = g_localy;  
-    start[ZDIM] = 0;  
-    start[TDIM] = 0;
-    
-    count[XDIM] = g_localwidth;  
-    count[YDIM] = g_localheight;  
-    count[ZDIM] = ZSIZE;
-    count[TDIM] = 1;
-
-    ncresult = ncmpi_put_vara_double_all(ncid, varid[i], start, count, g_data);
-    ncerror("ncmpi_put_vara_double", ncresult);
-    
-    if(! g_mpirank) printf("Closing file...\n");
-    
-    ncresult = ncmpi_close(ncid);
-    ncerror("ncmpi_close", ncresult);
-  }
-
-  elapsed = MPI_Wtime() - starttime;
-
-  if(! g_mpirank) printf("Done.  %f s\n\n", elapsed);
 
   return 0;
 }
@@ -233,125 +103,226 @@ int main(int argc, char* argv[])
 {
   char c;
   int ix, iy, iz, i;
-  char basename[256], filename[256];
-  int numtries = 1;
-  WriteMethod method = Both;
-  int pause = 0;
+  MPI_Comm mpicomm;
+  MPI_Info mpiinfo;
+  int mpirank;
+  int mpisize;
+  double *data3d, *data2d, *x, *y, *z, t;
+  int localx, localy, localwidth, localheight;
+  int ncresult;
+  int ncid, tvarid, xvarid, yvarid, zvarid;
+  int dimid[NDIMS], var3did[NVARS], var2did[NVARS];
+  size_t start[NDIMS], count[NDIMS];  
+  const char* filename = "output.nc";
+  char varname[32];
   
-  g_mpicomm = MPI_COMM_WORLD;
-  g_mpiinfo = MPI_INFO_NULL;
+  mpicomm = MPI_COMM_WORLD;
+  mpiinfo = MPI_INFO_NULL;
 
   MPI_Init(&argc, &argv);
-  MPI_Comm_size(g_mpicomm, &g_mpisize);
-  MPI_Comm_rank(g_mpicomm, &g_mpirank);
+  MPI_Comm_size(mpicomm, &mpisize);
+  MPI_Comm_rank(mpicomm, &mpirank);
 
-  strcpy(basename, "output.nc");
-
-  while((c = getopt(argc, argv, "i:o:m:p:")) != -1)
-  {
-    switch(c)
-    {
-    case 'i':
-      // Number of test iterations
-      numtries = atoi(optarg);
-      break;
-
-    case 'o':
-      // Output file base name
-      strcpy(basename, optarg);
-      break;
-
-    case 'm':
-      // Write method
-      if(0 == strcmp("pimsy", optarg) || 
-         0 == strcmp("pism", optarg) ||
-         0 == strcmp("1", optarg))
-      {
-        method = Pismy;
-      }
-      else if(0 == strcmp("alternate", optarg) ||
-              0 == strcmp("alt", optarg) ||
-              0 == strcmp("correct", optarg) ||
-              0 == strcmp("2", optarg))
-      {
-        method = Alternate;
-      }
-      else
-      {
-        method = Both;
-      }
-      break;
-
-    case 'p':
-      // Pause between iterations, in seconds
-      pause = atoi(optarg);
-    }
-  }
-
-  if(! g_mpirank)
-  {
-    printf("Running %d test iterations.\n", numtries);
-    printf("Using \"%s\" as the base filename.\n", basename);
-    printf("Pausing for %d s between tests.\n", pause);
-    if(method == Both)
-      printf("Testing both write methods.\n");
-    else if(method == Pismy)
-      printf("Testing pismy write method..\n");
-    else if(method == Alternate)
-      printf("Testing alternate write method.\n");
-  }
-
-  if(! g_mpirank) printf("Creating some data...\n");
+  if(! mpirank) printf("Creating some data...\n");
   
   // Distribute our data values in a pism-y way
-  GetLocalBounds(XSIZE, YSIZE, g_mpirank, g_mpisize,
-                 &g_localx, &g_localy, &g_localwidth, &g_localheight);
+  GetLocalBounds(XSIZE, YSIZE, mpirank, mpisize,
+                 &localx, &localy, &localwidth, &localheight);
   printf("Rank%02d: x=%d, y=%d, width=%d, height=%d\n",
-         g_mpirank, g_localx, g_localy, g_localwidth, g_localheight);
+         mpirank, localx, localy, localwidth, localheight);
   
-  g_data = (double*)malloc(g_localwidth * g_localheight * ZSIZE * sizeof(double));
-  g_x = (double*)malloc(g_localwidth * sizeof(double));
-  g_y = (double*)malloc(g_localheight * sizeof(double));
-  g_z = (double*)malloc(ZSIZE * sizeof(double));
-  g_t = 0.0;
-  for(ix = 0; ix < g_localwidth; ix++)
+  data2d = (double*)malloc(localwidth * localheight * sizeof(double));
+  data3d = (double*)malloc(localwidth * localheight * ZSIZE * sizeof(double));
+  x = (double*)malloc(localwidth * sizeof(double));
+  y = (double*)malloc(localheight * sizeof(double));
+  z = (double*)malloc(ZSIZE * sizeof(double));
+  t = 0.0;
+  for(ix = 0; ix < localwidth; ix++)
   {
-    g_x[ix] = ix;
-    for(iy = 0; iy < g_localheight; iy++)
+    x[ix] = ix + localx;
+    for(iy = 0; iy < localheight; iy++)
     {
-      g_y[iy] = iy;
+      y[iy] = iy + localy;
+      data2d[ix*localheight + iy] = (ix+localx)*localheight + iy+localy;
       for(iz = 0; iz < ZSIZE; iz++)
       {
-        g_z[iz] = iz;
-        g_data[iz*g_localwidth*g_localheight + iy*g_localwidth + ix] = 
-          iz*XSIZE*YSIZE + (iy+g_localy)*XSIZE + ix+g_localx;
+        z[iz] = iz;
+        data3d[ix*localheight*ZSIZE + iy*ZSIZE + iz] = 
+          (ix+localx)*YSIZE*ZSIZE + (iy+localy)*ZSIZE + iz;
       }
     }
   }
 
-  for(i = 0; i < numtries; i++)
+  if(! mpirank) printf("Creating NetCDF file...\n");
+
+  ncresult = nc_create_par(filename, NC_MPIIO | NC_NETCDF4, 
+                           mpicomm, mpiinfo, &ncid);
+  ncerror("nc_create_par", ncresult);
+
+  if(! mpirank) printf("Setting up dimensions...\n");
+
+  ncresult = nc_def_dim(ncid, TNAME, NC_UNLIMITED, &dimid[TDIM]);
+  ncerror("nc_def_dim", ncresult);
+
+  ncresult = nc_def_var(ncid, TNAME, NC_DOUBLE, 1, &dimid[TDIM], &tvarid);
+  ncerror("nc_def_var", ncresult);
+
+  if(! mpirank) printf("Writing t...\n");
+
+  nc_enddef(ncid);
+
+  ncresult = nc_var_par_access(ncid, tvarid, NC_COLLECTIVE);
+  ncerror("nc_var_par_access", ncresult);
+
+  start[0] = 0;  count[0] = 1;
+  ncresult = nc_put_vara_double(ncid, tvarid, start, count, &t);
+  ncerror("nc_put_var (t)", ncresult);
+
+  nc_redef(ncid);
+
+  ncresult = nc_def_dim(ncid, XNAME, XSIZE, &dimid[XDIM]);  
+  ncerror("nc_def_dim", ncresult);
+
+  ncresult = nc_def_var(ncid, XNAME, NC_DOUBLE, 1, &dimid[XDIM], &xvarid);
+  ncerror("nc_def_var", ncresult);
+
+  if(! mpirank) printf("Writing x...\n");
+
+  nc_enddef(ncid);
+
+  ncresult = nc_var_par_access(ncid, xvarid, NC_COLLECTIVE);
+  ncerror("nc_var_par_access", ncresult);
+
+  start[0] = localx;  count[0] = localwidth;
+  ncresult = nc_put_vara_double(ncid, xvarid, start, count, x);
+  ncerror("nc_put_vara_all (x)", ncresult);
+
+  nc_redef(ncid);
+
+  ncresult = nc_def_dim(ncid, YNAME, YSIZE, &dimid[YDIM]);  
+  ncerror("nc_def_dim", ncresult);
+
+  ncresult = nc_def_var(ncid, YNAME, NC_DOUBLE, 1, &dimid[YDIM], &yvarid);
+  ncerror("nc_def_var", ncresult);
+
+  if(! mpirank) printf("Writing y...\n");
+
+  nc_enddef(ncid);
+
+  ncresult = nc_var_par_access(ncid, yvarid, NC_COLLECTIVE);
+  ncerror("nc_var_par_access", ncresult);
+
+  start[0] = localy;  count[0] = localheight;
+  ncresult = nc_put_vara_double(ncid, yvarid, start, count, y);
+  ncerror("nc_put_vara_all (y)", ncresult);
+
+  nc_redef(ncid);
+
+  ncresult = nc_def_dim(ncid, ZNAME, ZSIZE, &dimid[ZDIM]);  
+  ncerror("nc_def_dim", ncresult);
+
+  ncresult = nc_def_var(ncid, ZNAME, NC_DOUBLE, 1, &dimid[ZDIM], &zvarid);
+  ncerror("nc_def_var", ncresult);
+
+  if(! mpirank) printf("Writing z...\n");
+
+  nc_enddef(ncid);
+
+  ncresult = nc_var_par_access(ncid, zvarid, NC_COLLECTIVE);
+  ncerror("nc_var_par_access", ncresult);
+
+  ncresult = nc_put_var_double(ncid, zvarid, z);
+  ncerror("nc_put_var (z)", ncresult);
+
+  nc_redef(ncid);
+
+  if(! mpirank) printf("Defining variables...\n");
+  
+  for(i = 0; i < NVARS; i++)
   {
-    if(method & Pismy)
-    {
-      sprintf(filename, "%d.pismy.%s", i, basename);
-      DoPismyWrite(filename);
+    sprintf(varname, "var3d%02d", i);
+    ncresult = nc_def_var(ncid, varname, NC_DOUBLE, NDIMS, dimid, &var3did[i]);
+    ncerror("nc_def_var", ncresult);
 
-      if(i < numtries - 1 ||
-         method & Alternate)
-        sleep(pause);
-    }
-
-    if(method & Alternate)
-    {
-      sprintf(filename, "%d.alt.%s", i, basename);
-      DoAlternateWrite(filename);
-
-      if(i < numtries - 1)
-        sleep(pause);
-    }
+    sprintf(varname, "var2d%02d", i);
+    ncresult = nc_def_var(ncid, varname, NC_DOUBLE, NDIMS-1, dimid, &var2did[i]);
   }
 
-  free(g_data);
+  if(! mpirank) printf("Closing...\n");
+
+  ncresult = nc_close(ncid);
+  ncerror("nc_close", ncresult);
+
+  for(i = 0; i < NVARS; i++)
+  {
+    if(! mpirank) printf("Openning...\n");
+
+    ncresult = nc_open_par(filename, NC_MPIIO | NC_WRITE, 
+                           mpicomm, mpiinfo, &ncid);
+    ncerror("nc_open_par", ncresult);
+
+    nc_enddef(ncid);
+    
+    if(! mpirank) printf("Writing data...\n");
+
+    start[XDIM] = localx; 
+    start[YDIM] = localy;  
+    start[ZDIM] = 0;  
+    start[TDIM] = 0;
+    
+    count[XDIM] = localwidth;  
+    count[YDIM] = localheight;  
+    count[ZDIM] = ZSIZE;
+    count[TDIM] = 1;
+
+    ncresult = nc_var_par_access(ncid, var3did[i], NC_COLLECTIVE);
+    ncerror("nc_var_par_access", ncresult);
+
+    ncresult = nc_put_vara_double(ncid, var3did[i], start, count, data3d);
+    ncerror("nc_put_vara_double", ncresult);
+    
+    if(! mpirank) printf("Closing file...\n");
+    
+    ncresult = nc_close(ncid);
+    ncerror("nc_close", ncresult);
+  }
+
+  for(i = 0; i < NVARS; i++)
+  {
+    if(! mpirank) printf("Openning...\n");
+
+    ncresult = nc_open_par(filename, NC_MPIIO | NC_WRITE, 
+                           mpicomm, mpiinfo, &ncid);
+    ncerror("nc_open_par", ncresult);
+
+    nc_enddef(ncid);
+    
+    if(! mpirank) printf("Writing data...\n");
+
+    start[XDIM] = localx; 
+    start[YDIM] = localy;  
+    start[TDIM] = 0;
+    
+    count[XDIM] = localwidth;  
+    count[YDIM] = localheight;  
+    count[TDIM] = 1;
+
+    ncresult = nc_var_par_access(ncid, var2did[i], NC_COLLECTIVE);
+    ncerror("nc_var_par_access", ncresult);
+
+    ncresult = nc_put_vara_double(ncid, var2did[i], start, count, data2d);
+    ncerror("nc_put_vara_double", ncresult);
+    
+    if(! mpirank) printf("Closing file...\n");
+    
+    ncresult = nc_close(ncid);
+    ncerror("nc_close", ncresult);
+  }
+
+  if(! mpirank) printf("Done.\n");
+
+  free(data2d);
+  free(data3d);
   MPI_Finalize();
 
   return 0;
