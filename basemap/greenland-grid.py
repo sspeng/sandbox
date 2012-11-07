@@ -45,16 +45,16 @@ for i in range(1,4):
     plt.plot([xcoord, xcoord], [m.llcrnry, m.urcrnry], 'k-')
 
 # draw horizontal process boundaries:
-for i in range(1,8):
-    ycoord = m.llcrnry + i*height/8
+for i in range(1,16):
+    ycoord = m.llcrnry + i*height/16
     plt.plot([m.llcrnrx, m.urcrnrx], [ycoord, ycoord], 'k-')
 
 # draw the rank labels
-for row in range(8):
+for row in range(16):
     for col in range(4):
         plt.text(m.llcrnrx + col*width/4 + width/8,
-                 m.llcrnry + row*height/8 + height/16,
-                 str(row + col*8),
+                 m.llcrnry + row*height/16 + height/32,
+                 str(row + col*16),
                  ha='center', va='center')
 
 plt.savefig('greenland-grid.png')
