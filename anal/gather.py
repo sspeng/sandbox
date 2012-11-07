@@ -1,8 +1,9 @@
 ##
 # gather.py - Created by Timothy Morey on 10/17/2012
 #
-# This file contains a script that analyzes the output of many ranger batch
-# runs.  It is currently tuned for doing the n,w parameter sweeps.
+# This file contains a script that analyzes the output of our batch runs, 
+# gathering the relevant pieces of information and saving them to a single
+# csv file.
 #
 
 import os
@@ -11,27 +12,26 @@ import sys
 basename = ''
 if len(sys.argv) > 1:
 	basename = sys.argv[1]
-
+        
 infiles = []
 for filename in os.listdir('.'):
 	if filename.startswith('o.' + basename):
 		infiles.append(filename)
 
 outfile = open('o.' + basename + '.csv', 'w')
-outfile.write('n,w,i,format,init_time,init%,step_time,step%,out_time,out%,t_real,t_user,t_sys\n')
-n = '?'
-w = '?'
-format = '?'
-t_real = '?'
-t_user = '?'
-t_sys = '?'
-i = '?'
-init_time = '?'
-init_pct = '?'
-step_time = '?'
-step_pct = '?'
-out_time = '?'
-out_pct = '?'
+outfile.write('n,i,format,init_time,init%,step_time,step%,out_time,out%,t_real,t_user,t_sys\n')
+n = None
+format = None
+t_real = None
+t_user = None
+t_sys = None
+i = None
+init_time = None
+init_pct = None
+step_time = None
+step_pct = None
+out_time = None
+out_pct = None
 ignore_run = False
 
 for filename in infiles:
@@ -40,56 +40,70 @@ for filename in infiles:
 	s = filename.replace('o.' + basename, '', 1)
 	if s.startswith('_n'):
 		s = s[2:]
-		n = s[0:s.find('.')]
-		s = s[s.find('_'):]
+                dotpos = s.find('.')
+                scrpos = s.find('_')
+                if scrpos < 0 or scrppos > dotpos:
+                        n = s[0:dotpos]
+                        s = s[dotpos:]
+                else:
+                        n = s[0:scrpos]
+                        s = s[scrpos:]
 		print 'Found n:', n
 
 	for line in open(filename):
-		if line.startswith('=== I = '):
+		if line.lower().startswith('=== i = '):
 			i = line[8:].strip()
 			print 'Found i:', i
 
-		if line.startswith('=== PISM_OFORMAT = '):
+                elif line.lower().startswith('=== n = '):
+                        n = line[8:].strip()
+                        print 'Found n:', n
+
+		elif line.startswith('=== PISM_OFORMAT = '):
 			format = line[18:].strip()
 			print 'Found format:', format
 
-		if line.startswith('#(spinup.sh)  running pclimate'):
+                elif line.startswith('-o_format '):
+                        format = line[10:].strip()
+                        print 'Found format:', format
+
+		elif line.startswith('#(spinup.sh)  running pclimate'):
 			ignore_run = True
 
-		if line.startswith(' 1:  Initialization:'):
+		elif line.startswith(' 1:  Initialization:'):
 			init_time = line[21:31].strip()
 			init_pct = line[31:37].strip()
 			print 'Found init_time:', init_time
 			print 'Found init_pct:', init_pct
 
-		if line.startswith(' 2:        Stepping:'):
+		elif line.startswith(' 2:        Stepping:'):
 			step_time = line[21:31].strip()
 			step_pct = line[31:37].strip()
 			print 'Found step_time:', step_time
 			print 'Found step_pct:', step_pct
 
-		if line.startswith(' 3:   PrimaryOutput:'):
+		elif line.startswith(' 3:   PrimaryOutput:'):
 			out_time = line[21:31].strip()
 			out_pct = line[31:37].strip()
 			print 'Found out_time:', out_time
 			print 'Found out_pct:', out_pct
 
-		if line.startswith('real '):
+		elif line.startswith('real '):
 			t_real = line[5:].strip()
 			print 'Found t_real:', t_real
 
-		if line.startswith('user '):
+		elif line.startswith('user '):
 			t_user = line[5:].strip()
 			print 'Found t_user:', t_user
 
-		if line.startswith('sys '):
+		elif line.startswith('sys '):
 			t_sys = line[4:].strip()
 			print 'Found t_sys:', t_sys
 			
 			if ignore_run:
 				ignore_run = False
 			else:	
-				outfile.write(','.join([n, w, i, format, 
+				outfile.write(','.join([n, i, format, 
 				                        init_time, init_pct, 
 				                        step_time, step_pct, 
 				                        out_time, out_pct, 
