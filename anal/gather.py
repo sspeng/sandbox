@@ -19,19 +19,20 @@ for filename in os.listdir('.'):
 		infiles.append(filename)
 
 outfile = open('o.' + basename + '.csv', 'w')
-outfile.write('n,i,format,init_time,init%,step_time,step%,out_time,out%,t_real,t_user,t_sys\n')
-n = None
-format = None
-t_real = None
-t_user = None
-t_sys = None
-i = None
-init_time = None
-init_pct = None
-step_time = None
-step_pct = None
-out_time = None
-out_pct = None
+outfile.write('n,N,w,format,init_time,init%,step_time,step%,out_time,out%,t_real,t_user,t_sys\n')
+n = ''
+N = ''
+w = ''
+format = ''
+t_real = ''
+t_user = ''
+t_sys = ''
+init_time = ''
+init_pct = ''
+step_time = ''
+step_pct = ''
+out_time = ''
+out_pct = ''
 ignore_run = False
 
 for filename in infiles:
@@ -42,13 +43,30 @@ for filename in infiles:
 		s = s[2:]
                 dotpos = s.find('.')
                 scrpos = s.find('_')
-                if scrpos < 0 or scrppos > dotpos:
+                if scrpos < 0 or scrpos > dotpos:
                         n = s[0:dotpos]
                         s = s[dotpos:]
                 else:
                         n = s[0:scrpos]
                         s = s[scrpos:]
 		print 'Found n:', n
+
+	if s.startswith('_N'):
+		s = s[2:]
+		dotpos = s.find('.')
+		scrpos = s.find('_')
+		if scrpos < 0 or scrpos > dotpos:
+			N = s[0:dotpos]
+			s = s[dotpos:]
+		else:
+			N = s[0:scrpos]
+			s = s[scrpos:]
+		print 'Found N:', N
+
+	if s.startswith('_w'):
+		s = s[2:]
+		w = s[0:s.find('.')]
+		print 'Found w:', w
 
 	for line in open(filename):
 		if line.lower().startswith('=== i = '):
@@ -103,7 +121,7 @@ for filename in infiles:
 			if ignore_run:
 				ignore_run = False
 			else:	
-				outfile.write(','.join([n, i, format, 
+				outfile.write(','.join([n, N, w, format, 
 				                        init_time, init_pct, 
 				                        step_time, step_pct, 
 				                        out_time, out_pct, 
