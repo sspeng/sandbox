@@ -19,7 +19,8 @@ for filename in os.listdir('.'):
 		infiles.append(filename)
 
 outfile = open('o.' + basename + '.csv', 'w')
-outfile.write('n,N,w,format,init_time,init%,step_time,step%,out_time,out%,t_real,t_user,t_sys\n')
+outfile.write('jobid,n,N,w,format,init_time,init%,step_time,step%,out_time,out%,t_real,t_user,t_sys\n')
+jobid = ''
 n = ''
 N = ''
 w = ''
@@ -67,6 +68,8 @@ for filename in infiles:
 		s = s[2:]
 		w = s[0:s.find('.')]
 		print 'Found w:', w
+
+	jobid = s[s.find('.')+1:]
 
 	for line in open(filename):
 		if line.lower().startswith('=== i = '):
@@ -121,7 +124,7 @@ for filename in infiles:
 			if ignore_run:
 				ignore_run = False
 			else:	
-				outfile.write(','.join([n, N, w, format, 
+				outfile.write(','.join([jobid, n, N, w, format, 
 				                        init_time, init_pct, 
 				                        step_time, step_pct, 
 				                        out_time, out_pct, 
