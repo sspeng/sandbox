@@ -48,6 +48,7 @@ int main(int argc, char* argv[]) {
   MPI_Offset fileoffset, bufoffset;
   MPI_Offset stripesize = 1048576;
   int stripecount = 128;
+  double start, stop;
 
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(comm, &mpirank);
@@ -126,6 +127,8 @@ int main(int argc, char* argv[]) {
   if(testcontig) {
     if(0 == mpirank) printf("Performing contiguous write...\n");
 
+    start = MPI_Wtime();
+
     sprintf(filename, "%s.contiguous", outpath);
     if(0 == mpirank) printf("Opening %s...\n", filename);
     result = MPI_File_open(comm, filename, 
@@ -142,10 +145,16 @@ int main(int argc, char* argv[]) {
 
     if(0 == mpirank) printf("Closing file...\n");
     MPI_File_close(&outfile);
+
+    stop = MPI_Wtime();
+
+    if(0 == mpirank) printf("Contiguous write took %f s.\n", stop - start);
   }
 
   if(teststriped) {
     if(0 == mpirank) printf("Performing stripe-aligned write...\n");
+
+    start = MPI_Wtime();
 
     sprintf(filename, "%s.striped", outpath);
     if(0 == mpirank) printf("Opening %s...\n", filename);
@@ -170,6 +179,10 @@ int main(int argc, char* argv[]) {
 
     if(0 == mpirank) printf("Closing file...\n");
     MPI_File_close(&outfile);
+
+    stop = MPI_Wtime();
+
+    if(0 == mpirank) printf("Stripe-aligned write took %f s.\n", stop - start);
   }
 
   MPI_Finalize();
