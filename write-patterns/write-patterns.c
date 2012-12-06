@@ -149,7 +149,7 @@ int main(int argc, char* argv[]) {
     lseek(outfile, fileoffset, SEEK_SET);
     written = 0;
     while(written < buflen) {
-      result = write(outfile, buf + written, buflen - written);
+      result = write(outfile, ((char*)buf) + written, buflen - written);
       if(result > 0) {
         written += result;
       } else {
@@ -195,7 +195,7 @@ int main(int argc, char* argv[]) {
       lseek(outfile, fileoffset, SEEK_SET);
       written = 0;
       while(written < stripesize) {
-        result = write(outfile, buf + written, stripesize - written);
+        result = write(outfile, ((char*)buf) + written, stripesize - written);
         if(result > 0) {
           written += result;
         } else {
