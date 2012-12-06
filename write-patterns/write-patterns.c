@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
   MPI_File outfile;
   MPI_Status status;
   void* buf = 0;
-  size_t buflen = 1073741824; // = 2^30
+  MPI_Offset buflen = 1073741824; // = 2^30
   int i;
   char outpath[256] = "./outfile";
   char filename[256];
@@ -49,9 +49,9 @@ int main(int argc, char* argv[]) {
   MPI_Offset stripesize = 1048576;
   int stripecount = 128;
 
-  result = MPI_Init(&argc, &argv);  MPIERR(result);
-  result = MPI_Comm_rank(comm, &mpirank);  MPIERR(result);
-  result = MPI_Comm_size(comm, &mpisize);  MPIERR(result);
+  MPI_Init(&argc, &argv);
+  MPI_Comm_rank(comm, &mpirank);
+  MPI_Comm_size(comm, &mpisize);
 
   // Default the number of stripes to the number of processes
   stripecount = mpisize;
@@ -101,12 +101,12 @@ int main(int argc, char* argv[]) {
   // Echo the parameter values we're using to stdout:
   if(0 == mpirank) {
     printf("Using '%s' as the base for all output filenames.\n", outpath);
-    printf("Local buffer size is %d bytes.\n", buflen);
+    printf("Local buffer size is %lld bytes.\n", buflen);
     printf("%s the contiguous write pattern.\n", 
            testcontig ? "Testing" : "Not testing");
     printf("%s the stripe-aligned write pattern.\n",
            teststriped ? "Testing" : "Not testing");
-    printf("Stripe size: %d.\n", stripesize);
+    printf("Stripe size: %lld.\n", stripesize);
     printf("Stripe count: %d.\n", stripecount);
   }
 
@@ -114,7 +114,7 @@ int main(int argc, char* argv[]) {
   result = MPI_Info_create(&info);  MPIERR(result);  MPIERR(result);
   sprintf(value, "%d", stripecount);
   result = MPI_Info_set(info, "striping_factor", value);  MPIERR(result);
-  sprintf(value, "%d", stripesize);
+  sprintf(value, "%lld", stripesize);
   result = MPI_Info_set(info, "striping_unit", value);  MPIERR(result);
 
   // Initialize our local data:
@@ -160,12 +160,10 @@ int main(int argc, char* argv[]) {
       fileoffset = i * stripecount * stripesize + mpirank * stripesize;
       bufoffset = i * stripesize;
 
-      printf("Rank %03d: Writing stripe %d at offset %lld.\n",
-             mpirank, i, fileoffset);
       result = MPI_File_seek(outfile, fileoffset, MPI_SEEK_SET);
       MPIERR(result);
 
-      result = MPI_File_write(outfile, buf + bufoffset, stripesize, 
+      result = MPI_File_write(outfile, ((char*)buf) + bufoffset, stripesize, 
                               MPI_BYTE, &status);
       MPIERR(result);
     }
