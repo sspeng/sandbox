@@ -20,6 +20,7 @@
 
 
 #define USE_MPIIO 1
+#define MAX_STRIPES 160
 
 #define MPIERR(code) {                                                  \
     if(MPI_SUCCESS != code) {                                           \
@@ -58,22 +59,28 @@ int main(int argc, char* argv[]) {
   int stripecount = 128;
   double start, elapsed, maxelapsed;
   MPI_Offset written;
+  int ratio;
 
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(comm, &mpirank);
   MPI_Comm_size(comm, &mpisize);
 
-  // Default the number of stripes to the number of processes
+  // Default the number of stripes to the number of processes, and keep halving
+  // it until we get a valid stripe count:
   stripecount = mpisize;
+  while(stripecount > MAX_STRIPES)
+    stripecount /= 2;
 
   // Parse the command line arguments:
-  while((c = getopt(argc, argv, "c:m:o:s:")) != -1) {
+  // Note: if both -c and -r are set, the one that appears later in the command
+  //       line arguments will override the former.
+  while((c = getopt(argc, argv, "c:m:o:r:s:")) != -1) {
     switch(c) {
     case 'c':  // Stripe count
       stripecount = atoi(optarg);
       break;
 
-    case 'm':  // WHich tests are we running?
+    case 'm':  // Which tests are we running?
       if(0 == strcmp("both", optarg) || 
          0 == strcmp("b", optarg)) {
         testcontig = 1;
@@ -97,6 +104,11 @@ int main(int argc, char* argv[]) {
       strcpy(outpath, optarg);
       break;
 
+    case 'r':  // Process-to-OST ratio
+      ratio = atoi(optarg);
+      stripecount = mpisize / ratio;
+      break;
+
     case 's':  // Stripe size
       stripesize = atoi(optarg);
       break;
@@ -106,6 +118,15 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Unrecognized argument %c\n", c);
       break;
     }
+  }
+
+  // Check for any problematic parameters:
+  if(stripecount > MAX_STRIPES) {
+    if(0 == mpirank) {
+      fprintf(stderr, "Invalid stripe count: %d.\n", stripecount);
+    }
+
+    exit(1);
   }
 
   // Echo the parameter values we're using to stdout:
