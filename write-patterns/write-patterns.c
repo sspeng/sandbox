@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
   MPI_Offset fileoffset, bufoffset;
   MPI_Offset stripesize = 1048576;
   int stripecount = 128;
-  double start, elapsed;
+  double start, elapsed, maxelapsed;
   MPI_Offset written;
 
   MPI_Init(&argc, &argv);
@@ -195,9 +195,9 @@ int main(int argc, char* argv[]) {
 
     elapsed = MPI_Wtime() - start;
 
-    MPI_Reduce(&elapsed, &elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
+    MPI_Reduce(&elapsed, &maxelapsed, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
 
-    if(0 == mpirank) printf("Stripe-aligned write took %f s.\n", elapsed);
+    if(0 == mpirank) printf("Stripe-aligned write took %f s.\n", maxelapsed);
   }
 
   if(testcontig) {
@@ -253,9 +253,9 @@ int main(int argc, char* argv[]) {
 
     elapsed = MPI_Wtime() - start;
 
-    MPI_Reduce(&elapsed, &elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
+    MPI_Reduce(&elapsed, &maxelapsed, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
 
-    if(0 == mpirank) printf("Contiguous write took %f s.\n", elapsed);
+    if(0 == mpirank) printf("Contiguous write took %f s.\n", maxelapsed);
   }
 
   MPI_Finalize();
