@@ -10,6 +10,7 @@
  */
 
 
+#include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <mpi.h>
@@ -17,6 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+
+#define USE_MPIIO 1
 
 #define MPIERR(code) {                                                  \
     if(MPI_SUCCESS != code) {                                           \
@@ -34,9 +37,12 @@ int main(int argc, char* argv[]) {
   int mpirank, mpisize;
   MPI_Comm comm = MPI_COMM_WORLD;
   MPI_Info info = MPI_INFO_NULL;
-  //MPI_File outfile;
-  int outfile;
+#ifdef USE_MPIIO
+  MPI_File outfile;
   MPI_Status status;
+#else
+  int outfile;
+#endif
   void* buf = 0;
   MPI_Offset buflen = 1073741824; // = 2^30
   int i;
@@ -50,7 +56,7 @@ int main(int argc, char* argv[]) {
   MPI_Offset fileoffset, bufoffset;
   MPI_Offset stripesize = 1048576;
   int stripecount = 128;
-  double start, stop;
+  double start, elapsed;
   MPI_Offset written;
 
   MPI_Init(&argc, &argv);
@@ -120,52 +126,13 @@ int main(int argc, char* argv[]) {
   result = MPI_Info_set(info, "striping_factor", value);  MPIERR(result);
   sprintf(value, "%lld", stripesize);
   result = MPI_Info_set(info, "striping_unit", value);  MPIERR(result);
+  result = MPI_Info_set(info, "romio_ds_write", "disable");  MPIERR(result);
 
   // Initialize our local data:
   if(0 == mpirank) 
     printf("Initializing data...\n");
   buf = malloc(buflen);
   memset(buf, mpirank, buflen);
-
-  if(testcontig) {
-    if(0 == mpirank) printf("Performing contiguous write...\n");
-
-    start = MPI_Wtime();
-
-    sprintf(filename, "%s.contiguous", outpath);
-    if(0 == mpirank) printf("Opening %s...\n", filename);
-    //result = MPI_File_open(comm, filename, 
-    //                       MPI_MODE_CREATE | MPI_MODE_WRONLY, 
-    //                       info, &outfile);
-    //MPIERR(result);
-    outfile = open(filename, O_WRONLY | O_CREAT);
-
-    if(0 == mpirank) printf("Writing data...\n");
-    fileoffset = mpirank * buflen;
-    //result = MPI_File_seek(outfile, fileoffset, MPI_SEEK_SET);  
-    //MPIERR(result);
-    //result = MPI_File_write(outfile, buf, buflen, MPI_BYTE, &status);  
-    //MPIERR(result);
-    lseek(outfile, fileoffset, SEEK_SET);
-    written = 0;
-    while(written < buflen) {
-      result = write(outfile, ((char*)buf) + written, buflen - written);
-      if(result > 0) {
-        written += result;
-      } else {
-        fprintf(stderr, "write failed with code %d.\n", result);
-        break;
-      }
-    }
-
-    if(0 == mpirank) printf("Closing file...\n");
-    //MPI_File_close(&outfile);
-    close(outfile);
-
-    stop = MPI_Wtime();
-
-    if(0 == mpirank) printf("Contiguous write took %f s.\n", stop - start);
-  }
 
   if(teststriped) {
     if(0 == mpirank) printf("Performing stripe-aligned write...\n");
@@ -174,11 +141,19 @@ int main(int argc, char* argv[]) {
 
     sprintf(filename, "%s.striped", outpath);
     if(0 == mpirank) printf("Opening %s...\n", filename);
-    //result = MPI_File_open(comm, filename, 
-    //                       MPI_MODE_CREATE | MPI_MODE_WRONLY, 
-    //                       info, &outfile);
-    //MPIERR(result);
+
+#ifdef USE_MPIIO
+    result = MPI_File_open(comm, filename, 
+                           MPI_MODE_CREATE | MPI_MODE_WRONLY, 
+                           info, &outfile);
+    MPIERR(result);
+#else
     outfile = open(filename, O_WRONLY | O_CREAT);
+    if(-1 == outfile) {
+      fprintf(stderr, "Rank %03d: Failed to open '%s' with code %d.\n",
+              mpirank, filename, errno);
+    }
+#endif
 
     if(0 == mpirank) printf("Writing data...\n");
     // assuming that buflen % stripesize == 0:
@@ -186,12 +161,14 @@ int main(int argc, char* argv[]) {
       fileoffset = i * stripecount * stripesize + mpirank * stripesize;
       bufoffset = i * stripesize;
 
-      //result = MPI_File_seek(outfile, fileoffset, MPI_SEEK_SET);
-      //MPIERR(result);
+#ifdef USE_MPIIO
+      result = MPI_File_seek(outfile, fileoffset, MPI_SEEK_SET);
+      MPIERR(result);
 
-      //result = MPI_File_write(outfile, ((char*)buf) + bufoffset, stripesize, 
-      //                        MPI_BYTE, &status);
-      //MPIERR(result);
+      result = MPI_File_write(outfile, ((char*)buf) + bufoffset, stripesize, 
+                              MPI_BYTE, &status);
+      MPIERR(result);
+#else
       lseek(outfile, fileoffset, SEEK_SET);
       written = 0;
       while(written < stripesize) {
@@ -199,19 +176,86 @@ int main(int argc, char* argv[]) {
         if(result > 0) {
           written += result;
         } else {
-          fprintf(stderr, "write failed with code %d.\n", result);
+          fprintf(stderr, "Rank %03d: write failed with code %d.\n", mpirank, errno);
           break;
         }
       }
+
+      if(written < stripesize) break;
+#endif
     }
 
     if(0 == mpirank) printf("Closing file...\n");
-    //MPI_File_close(&outfile);
+
+#ifdef USE_MPIIO
+    MPI_File_close(&outfile);
+#else
     close(outfile);
+#endif
 
-    stop = MPI_Wtime();
+    elapsed = MPI_Wtime() - start;
 
-    if(0 == mpirank) printf("Stripe-aligned write took %f s.\n", stop - start);
+    MPI_Reduce(&elapsed, &elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
+
+    if(0 == mpirank) printf("Stripe-aligned write took %f s.\n", elapsed);
+  }
+
+  if(testcontig) {
+    if(0 == mpirank) printf("Performing contiguous write...\n");
+
+    start = MPI_Wtime();
+
+    sprintf(filename, "%s.contiguous", outpath);
+    if(0 == mpirank) printf("Opening %s...\n", filename);
+
+#ifdef USE_MPIIO
+    result = MPI_File_open(comm, filename, 
+                           MPI_MODE_CREATE | MPI_MODE_WRONLY, 
+                           info, &outfile);
+    MPIERR(result);
+#else
+    outfile = open(filename, O_WRONLY | O_CREAT);
+    if(-1 == outfile) {
+      fprintf(stderr, "Rank %03d: Failed to open '%s' with code %d.\n",
+              mpirank, filename, errno);
+    }
+#endif
+
+    if(0 == mpirank) printf("Writing data...\n");
+    fileoffset = mpirank * buflen;
+    
+#ifdef USE_MPIIO
+    result = MPI_File_seek(outfile, fileoffset, MPI_SEEK_SET);  
+    MPIERR(result);
+    result = MPI_File_write(outfile, buf, buflen, MPI_BYTE, &status);  
+    MPIERR(result);
+#else
+    lseek(outfile, fileoffset, SEEK_SET);
+    written = 0;
+    while(written < buflen) {
+      result = write(outfile, ((char*)buf) + written, buflen - written);
+      if(result > 0) {
+        written += result;
+      } else {
+        fprintf(stderr, "Rand %03d: write failed with code %d.\n", mpirank, errno);
+        break;
+      }
+    }
+#endif
+
+    if(0 == mpirank) printf("Closing file...\n");
+
+#ifdef USE_MPIIO
+    MPI_File_close(&outfile);
+#else
+    close(outfile);
+#endif
+
+    elapsed = MPI_Wtime() - start;
+
+    MPI_Reduce(&elapsed, &elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
+
+    if(0 == mpirank) printf("Contiguous write took %f s.\n", elapsed);
   }
 
   MPI_Finalize();
