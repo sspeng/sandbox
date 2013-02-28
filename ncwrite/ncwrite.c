@@ -13,17 +13,17 @@
 #include <netcdf_par.h>
 #include <netcdf.h>
 
-#define NVARS 4
+#define NVARS 3
 #define NDIMS 4
 #define XNAME "x"
 #define XDIM 1
-#define XSIZE 600
+#define XSIZE 1501
 #define YNAME "y"
 #define YDIM 2
-#define YSIZE 600
+#define YSIZE 2801
 #define ZNAME "z"
 #define ZDIM 3
-#define ZSIZE 301
+#define ZSIZE 401
 #define TNAME "t"
 #define TDIM 0
 
@@ -109,10 +109,11 @@ int main(int argc, char* argv[])
   int mpisize;
   double *data3d, *data2d, *x, *y, *z, t;
   int localx, localy, localwidth, localheight;
+  int maxwidth, maxheight;
   int ncresult;
   int ncid, tvarid, xvarid, yvarid, zvarid;
   int dimid[NDIMS], var3did[NVARS], var2did[NVARS];
-  size_t start[NDIMS], count[NDIMS];  
+  size_t start[NDIMS], count[NDIMS], chunksize[NDIMS];  
   const char* filename = "output.nc";
   char varname[32];
   
@@ -237,34 +238,36 @@ int main(int argc, char* argv[])
   nc_redef(ncid);
 
   if(! mpirank) printf("Defining variables...\n");
+
+  MPI_Allreduce(&localwidth, &maxwidth, 1, MPI_INT, MPI_MAX, mpicomm);
+  MPI_Allreduce(&localheight, &maxheight, 1, MPI_INT, MPI_MAX, mpicomm);
   
   for(i = 0; i < NVARS; i++)
   {
-    sprintf(varname, "var3d%02d", i);
+    sprintf(varname, "var3d-%02d", i);
     ncresult = nc_def_var(ncid, varname, NC_DOUBLE, NDIMS, dimid, &var3did[i]);
     ncerror("nc_def_var", ncresult);
 
-    sprintf(varname, "var2d%02d", i);
+    chunksize[TDIM] = 1;
+    chunksize[XDIM] = maxwidth;
+    chunksize[YDIM] = maxheight;
+    chunksize[ZDIM] = ZSIZE;
+    ncresult = nc_def_var_chunking(ncid, var3did[i], NC_CHUNKED, chunksize);
+    ncerror("nc_def_var_chunking", ncresult);
+
+    sprintf(varname, "var2d-%02d", i);
     ncresult = nc_def_var(ncid, varname, NC_DOUBLE, NDIMS-1, dimid, &var2did[i]);
+
+    ncresult = nc_def_var_chunking(ncid, var2did[i], NC_CHUNKED, chunksize);
+    ncerror("nc_def_var_chunking", ncresult);
   }
 
-  if(! mpirank) printf("Closing...\n");
+  nc_enddef(ncid);
 
-  ncresult = nc_close(ncid);
-  ncerror("nc_close", ncresult);
+  if(! mpirank) printf("Writing variable data...\n");
 
   for(i = 0; i < NVARS; i++)
   {
-    if(! mpirank) printf("Openning...\n");
-
-    ncresult = nc_open_par(filename, NC_MPIIO | NC_WRITE, 
-                           mpicomm, mpiinfo, &ncid);
-    ncerror("nc_open_par", ncresult);
-
-    nc_enddef(ncid);
-    
-    if(! mpirank) printf("Writing data...\n");
-
     start[XDIM] = localx; 
     start[YDIM] = localy;  
     start[ZDIM] = 0;  
@@ -275,54 +278,35 @@ int main(int argc, char* argv[])
     count[ZDIM] = ZSIZE;
     count[TDIM] = 1;
 
+    if(! mpirank) printf("Writing var3d-%02d...\n", i);
+
     ncresult = nc_var_par_access(ncid, var3did[i], NC_COLLECTIVE);
     ncerror("nc_var_par_access", ncresult);
 
     ncresult = nc_put_vara_double(ncid, var3did[i], start, count, data3d);
     ncerror("nc_put_vara_double", ncresult);
-    
-    if(! mpirank) printf("Closing file...\n");
-    
-    ncresult = nc_close(ncid);
-    ncerror("nc_close", ncresult);
-  }
 
-  for(i = 0; i < NVARS; i++)
-  {
-    if(! mpirank) printf("Openning...\n");
-
-    ncresult = nc_open_par(filename, NC_MPIIO | NC_WRITE, 
-                           mpicomm, mpiinfo, &ncid);
-    ncerror("nc_open_par", ncresult);
-
-    nc_enddef(ncid);
-    
-    if(! mpirank) printf("Writing data...\n");
-
-    start[XDIM] = localx; 
-    start[YDIM] = localy;  
-    start[TDIM] = 0;
-    
-    count[XDIM] = localwidth;  
-    count[YDIM] = localheight;  
-    count[TDIM] = 1;
+    if(! mpirank) printf("Writing var2d-%02d...\n", i);
 
     ncresult = nc_var_par_access(ncid, var2did[i], NC_COLLECTIVE);
     ncerror("nc_var_par_access", ncresult);
 
     ncresult = nc_put_vara_double(ncid, var2did[i], start, count, data2d);
     ncerror("nc_put_vara_double", ncresult);
-    
-    if(! mpirank) printf("Closing file...\n");
-    
-    ncresult = nc_close(ncid);
-    ncerror("nc_close", ncresult);
   }
+
+  if(! mpirank) printf("Closing file...\n");
+
+  nc_close(ncid);
 
   if(! mpirank) printf("Done.\n");
 
   free(data2d);
   free(data3d);
+  free(x);
+  free(y);
+  free(z);
+
   MPI_Finalize();
 
   return 0;

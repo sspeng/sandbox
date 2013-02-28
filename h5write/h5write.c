@@ -13,17 +13,17 @@
 
 #include <hdf5.h>
 
-#define NVARS 4
+#define NVARS 3
 #define NDIMS 4
 #define XNAME "x"
 #define XDIM 1
-#define XSIZE 10
+#define XSIZE 1501
 #define YNAME "y"
 #define YDIM 2
-#define YSIZE 10
+#define YSIZE 2801
 #define ZNAME "z"
 #define ZDIM 3
-#define ZSIZE 10
+#define ZSIZE 401
 #define TNAME "t"
 #define TDIM 0
 
@@ -103,14 +103,6 @@ int main(int argc, char* argv[])
   hsize_t size[NDIMS], maxsize[NDIMS], chunksize[NDIMS];
   hsize_t start[NDIMS], count[NDIMS];
   char varname[32];
-
-/*
-  int ncresult;
-  int ncid, tvarid, xvarid, yvarid, zvarid;
-  int dimid[NDIMS], var3did[NVARS], var2did[NVARS];
-  size_t start[NDIMS], count[NDIMS];  
-  const char* filename = "output.nc";
-*/
 
   mpicomm = MPI_COMM_WORLD;
   mpiinfo = MPI_INFO_NULL;
@@ -290,7 +282,7 @@ int main(int argc, char* argv[])
 
   for(i = 0; i < NVARS; i++)
   {
-    sprintf(varname, "var3d%02d", i);
+    sprintf(varname, "var3d-%02d", i);
     plist = H5Pcreate(H5P_DATASET_CREATE);
     H5Pset_chunk(plist, NDIMS, chunksize);
     filespace = H5Screate_simple(NDIMS, size, maxsize);
@@ -300,7 +292,7 @@ int main(int argc, char* argv[])
     H5Sclose(filespace);
     H5Dclose(varid);
 
-    sprintf(varname, "var2d%02d", i);
+    sprintf(varname, "var2d-%02d", i);
     plist = H5Pcreate(H5P_DATASET_CREATE);
     H5Pset_chunk(plist, NDIMS-1, chunksize);
     filespace = H5Screate_simple(NDIMS-1, size, maxsize);
@@ -315,7 +307,7 @@ int main(int argc, char* argv[])
 
   for(i = 0; i < NVARS; i++)
   {
-    sprintf(varname, "var3d%02d", i);
+    sprintf(varname, "var3d-%02d", i);
     if(! mpirank) printf("Writing %s...\n", varname);
     start[TDIM] = 0;
     start[XDIM] = localx;
@@ -337,7 +329,7 @@ int main(int argc, char* argv[])
     H5Sclose(memspace);
     H5Dclose(varid);
 
-    sprintf(varname, "var2d%02d", i);
+    sprintf(varname, "var2d-%02d", i);
     if(! mpirank) printf("Writing %s...\n", varname);
     start[TDIM] = 0;
     start[XDIM] = localx;
