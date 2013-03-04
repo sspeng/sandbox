@@ -1,3 +1,4 @@
+
 /**
    pncwrite.c - Created by Timothy Morey on 3/4/2013
 
@@ -23,6 +24,8 @@
 #define ZSIZE 401
 #define TNAME "t"
 #define TDIM 0
+
+//#define OLD_WRITE_PATTERN 1
 
 
 int ncerror(const char* function, int result)
@@ -164,15 +167,14 @@ int main(int argc, char* argv[])
   ncresult = ncmpi_def_var(ncid, TNAME, NC_DOUBLE, 1, &dimid[TDIM], &tvarid);
   ncerror("ncmpi_def_var", ncresult);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing t...\n");
-
   ncmpi_enddef(ncid);
-
   start[0] = 0;  count[0] = 1;
   ncresult = ncmpi_put_vara_double_all(ncid, tvarid, start, count, &t);
   ncerror("ncmpi_put_var (t)", ncresult);
-
   ncmpi_redef(ncid);
+#endif
 
   ncresult = ncmpi_def_dim(ncid, XNAME, XSIZE, &dimid[XDIM]);  
   ncerror("ncmpi_def_dim", ncresult);
@@ -180,15 +182,14 @@ int main(int argc, char* argv[])
   ncresult = ncmpi_def_var(ncid, XNAME, NC_DOUBLE, 1, &dimid[XDIM], &xvarid);
   ncerror("ncmpi_def_var", ncresult);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing x...\n");
-
   ncmpi_enddef(ncid);
-
   start[0] = localx;  count[0] = localwidth;
   ncresult = ncmpi_put_vara_double_all(ncid, xvarid, start, count, x);
   ncerror("ncmpi_put_vara_all (x)", ncresult);
-
   ncmpi_redef(ncid);
+#endif
 
   ncresult = ncmpi_def_dim(ncid, YNAME, YSIZE, &dimid[YDIM]);  
   ncerror("ncmpi_def_dim", ncresult);
@@ -196,15 +197,14 @@ int main(int argc, char* argv[])
   ncresult = ncmpi_def_var(ncid, YNAME, NC_DOUBLE, 1, &dimid[YDIM], &yvarid);
   ncerror("ncmpi_def_var", ncresult);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing y...\n");
-
   ncmpi_enddef(ncid);
-
   start[0] = localy;  count[0] = localheight;
   ncresult = ncmpi_put_vara_double_all(ncid, yvarid, start, count, y);
   ncerror("ncmpi_put_vara_double_all (y)", ncresult);
-
   ncmpi_redef(ncid);
+#endif
 
   ncresult = ncmpi_def_dim(ncid, ZNAME, ZSIZE, &dimid[ZDIM]);  
   ncerror("ncmpi_def_dim", ncresult);
@@ -212,14 +212,13 @@ int main(int argc, char* argv[])
   ncresult = ncmpi_def_var(ncid, ZNAME, NC_DOUBLE, 1, &dimid[ZDIM], &zvarid);
   ncerror("ncmpi_def_var", ncresult);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing z...\n");
-
   ncmpi_enddef(ncid);
-
   ncresult = ncmpi_put_var_double_all(ncid, zvarid, z);
   ncerror("ncmpi_put_var_double_all (z)", ncresult);
-
   ncmpi_redef(ncid);
+#endif
 
   if(! mpirank) printf("Defining variables...\n");
 
@@ -238,6 +237,27 @@ int main(int argc, char* argv[])
   }
 
   ncmpi_enddef(ncid);
+
+#ifndef OLD_WRITE_PATTERN
+  if(! mpirank) printf("Writing t...\n");
+  start[0] = 0;  count[0] = 1;
+  ncresult = ncmpi_put_vara_double_all(ncid, tvarid, start, count, &t);
+  ncerror("ncmpi_put_var (t)", ncresult);
+
+  if(! mpirank) printf("Writing x...\n");
+  start[0] = localx;  count[0] = localwidth;
+  ncresult = ncmpi_put_vara_double_all(ncid, xvarid, start, count, x);
+  ncerror("ncmpi_put_vara_all (x)", ncresult);
+
+  if(! mpirank) printf("Writing y...\n");
+  start[0] = localy;  count[0] = localheight;
+  ncresult = ncmpi_put_vara_double_all(ncid, yvarid, start, count, y);
+  ncerror("ncmpi_put_vara_double_all (y)", ncresult);
+
+  if(! mpirank) printf("Writing z...\n");
+  ncresult = ncmpi_put_var_double_all(ncid, zvarid, z);
+  ncerror("ncmpi_put_var_double_all (z)", ncresult);
+#endif
 
   if(! mpirank) printf("Writing variable data...\n");
 

@@ -27,6 +27,8 @@
 #define TNAME "t"
 #define TDIM 0
 
+//#define OLD_WRITE_PATTERN 1
+
 
 int ncerror(const char* function, int result)
 {
@@ -168,18 +170,16 @@ int main(int argc, char* argv[])
   ncresult = nc_def_var(ncid, TNAME, NC_DOUBLE, 1, &dimid[TDIM], &tvarid);
   ncerror("nc_def_var", ncresult);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing t...\n");
-
   nc_enddef(ncid);
-
   ncresult = nc_var_par_access(ncid, tvarid, NC_COLLECTIVE);
   ncerror("nc_var_par_access", ncresult);
-
   start[0] = 0;  count[0] = 1;
   ncresult = nc_put_vara_double(ncid, tvarid, start, count, &t);
   ncerror("nc_put_var (t)", ncresult);
-
   nc_redef(ncid);
+#endif
 
   ncresult = nc_def_dim(ncid, XNAME, XSIZE, &dimid[XDIM]);  
   ncerror("nc_def_dim", ncresult);
@@ -187,18 +187,16 @@ int main(int argc, char* argv[])
   ncresult = nc_def_var(ncid, XNAME, NC_DOUBLE, 1, &dimid[XDIM], &xvarid);
   ncerror("nc_def_var", ncresult);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing x...\n");
-
   nc_enddef(ncid);
-
   ncresult = nc_var_par_access(ncid, xvarid, NC_COLLECTIVE);
   ncerror("nc_var_par_access", ncresult);
-
   start[0] = localx;  count[0] = localwidth;
   ncresult = nc_put_vara_double(ncid, xvarid, start, count, x);
   ncerror("nc_put_vara_all (x)", ncresult);
-
   nc_redef(ncid);
+#endif
 
   ncresult = nc_def_dim(ncid, YNAME, YSIZE, &dimid[YDIM]);  
   ncerror("nc_def_dim", ncresult);
@@ -206,18 +204,16 @@ int main(int argc, char* argv[])
   ncresult = nc_def_var(ncid, YNAME, NC_DOUBLE, 1, &dimid[YDIM], &yvarid);
   ncerror("nc_def_var", ncresult);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing y...\n");
-
   nc_enddef(ncid);
-
   ncresult = nc_var_par_access(ncid, yvarid, NC_COLLECTIVE);
   ncerror("nc_var_par_access", ncresult);
-
   start[0] = localy;  count[0] = localheight;
   ncresult = nc_put_vara_double(ncid, yvarid, start, count, y);
   ncerror("nc_put_vara_all (y)", ncresult);
-
   nc_redef(ncid);
+#endif
 
   ncresult = nc_def_dim(ncid, ZNAME, ZSIZE, &dimid[ZDIM]);  
   ncerror("nc_def_dim", ncresult);
@@ -225,17 +221,15 @@ int main(int argc, char* argv[])
   ncresult = nc_def_var(ncid, ZNAME, NC_DOUBLE, 1, &dimid[ZDIM], &zvarid);
   ncerror("nc_def_var", ncresult);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing z...\n");
-
   nc_enddef(ncid);
-
   ncresult = nc_var_par_access(ncid, zvarid, NC_COLLECTIVE);
   ncerror("nc_var_par_access", ncresult);
-
   ncresult = nc_put_var_double(ncid, zvarid, z);
   ncerror("nc_put_var (z)", ncresult);
-
   nc_redef(ncid);
+#endif
 
   if(! mpirank) printf("Defining variables...\n");
 
@@ -263,6 +257,35 @@ int main(int argc, char* argv[])
   }
 
   nc_enddef(ncid);
+
+#ifndef OLD_WRITE_PATTERN
+  if(! mpirank) printf("Writing t...\n");
+  ncresult = nc_var_par_access(ncid, tvarid, NC_COLLECTIVE);
+  ncerror("nc_var_par_access", ncresult);
+  start[0] = 0;  count[0] = 1;
+  ncresult = nc_put_vara_double(ncid, tvarid, start, count, &t);
+  ncerror("nc_put_var (t)", ncresult);
+
+  if(! mpirank) printf("Writing x...\n");
+  ncresult = nc_var_par_access(ncid, xvarid, NC_COLLECTIVE);
+  ncerror("nc_var_par_access", ncresult);
+  start[0] = localx;  count[0] = localwidth;
+  ncresult = nc_put_vara_double(ncid, xvarid, start, count, x);
+  ncerror("nc_put_vara_all (x)", ncresult);
+
+  if(! mpirank) printf("Writing y...\n");
+  ncresult = nc_var_par_access(ncid, yvarid, NC_COLLECTIVE);
+  ncerror("nc_var_par_access", ncresult);
+  start[0] = localy;  count[0] = localheight;
+  ncresult = nc_put_vara_double(ncid, yvarid, start, count, y);
+  ncerror("nc_put_vara_all (y)", ncresult);
+
+  if(! mpirank) printf("Writing z...\n");
+  ncresult = nc_var_par_access(ncid, zvarid, NC_COLLECTIVE);
+  ncerror("nc_var_par_access", ncresult);
+  ncresult = nc_put_var_double(ncid, zvarid, z);
+  ncerror("nc_put_var (z)", ncresult);
+#endif
 
   if(! mpirank) printf("Writing variable data...\n");
 

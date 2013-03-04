@@ -27,6 +27,8 @@
 #define TNAME "t"
 #define TDIM 0
 
+#define OLD_WRITE_PATTERN 1
+
 
 int GetLocalBounds(int gwidth, int gheight, int rank, int size, 
 		   int* x, int* y, int* width, int* height)
@@ -141,7 +143,6 @@ int main(int argc, char* argv[])
     }
   }
 
-
   if(! mpirank) printf("Creating HDF5 file...\n");
 
   plist = H5Pcreate(H5P_FILE_ACCESS);
@@ -172,9 +173,13 @@ int main(int argc, char* argv[])
                      H5P_DEFAULT, plist, H5P_DEFAULT);
   H5Pclose(plist);
   H5DSset_scale(dimvar, TNAME);
+  H5Dclose(dimvar);
+  H5Sclose(filespace);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing time dimension...\n");
-
+  dimvar = H5Dopen(fileid, TNAME, H5P_DEFAULT);
+  filespace = H5Dget_space(dimvar);
   memspace = H5Screate_simple(1, size, 0);
   plist = H5Pcreate(H5P_DATASET_XFER);
   H5Pset_dxpl_mpio(plist, H5FD_MPIO_COLLECTIVE); // TODO: Pism does this, but comments suggest it is questionable
@@ -182,11 +187,11 @@ int main(int argc, char* argv[])
   count[0] = 1;
   H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, 0, count, 0);
   H5Dwrite(dimvar, H5T_NATIVE_DOUBLE, memspace, filespace, plist, &t);
-
   H5Pclose(plist);
   H5Sclose(filespace);
   H5Sclose(memspace);
   H5Dclose(dimvar);
+#endif
 
   if(! mpirank) printf("Creating x dimension...\n");
 
@@ -196,9 +201,13 @@ int main(int argc, char* argv[])
   dimvar = H5Dcreate(fileid, XNAME, H5T_NATIVE_DOUBLE, filespace,
                      H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   H5DSset_scale(dimvar, XNAME);
+  H5Dclose(dimvar);
+  H5Sclose(filespace);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing x dimension...\n");
-
+  dimvar = H5Dopen(fileid, XNAME, H5P_DEFAULT);
+  filespace = H5Dget_space(dimvar);
   memspace = H5Screate_simple(1, size, 0);
   plist = H5Pcreate(H5P_DATASET_XFER);
   H5Pset_dxpl_mpio(plist, H5FD_MPIO_COLLECTIVE);
@@ -206,11 +215,11 @@ int main(int argc, char* argv[])
   count[0] = XSIZE;
   H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, 0, count, 0);
   H5Dwrite(dimvar, H5T_NATIVE_DOUBLE, memspace, filespace, plist, x);
-
   H5Pclose(plist);
   H5Sclose(filespace);
   H5Sclose(memspace);
   H5Dclose(dimvar);
+#endif
 
   if(! mpirank) printf("Creating y dimension...\n");
 
@@ -220,9 +229,13 @@ int main(int argc, char* argv[])
   dimvar = H5Dcreate(fileid, YNAME, H5T_NATIVE_DOUBLE, filespace,
                      H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   H5DSset_scale(dimvar, YNAME);
+  H5Dclose(dimvar);
+  H5Sclose(filespace);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing y dimension...\n");
-
+  dimvar = H5Dopen(fileid, YNAME, H5P_DEFAULT);
+  filespace = H5Dget_space(dimvar);
   memspace = H5Screate_simple(1, size, 0);
   plist = H5Pcreate(H5P_DATASET_XFER);
   H5Pset_dxpl_mpio(plist, H5FD_MPIO_COLLECTIVE);
@@ -230,11 +243,11 @@ int main(int argc, char* argv[])
   count[0] = YSIZE;
   H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, 0, count, 0);
   H5Dwrite(dimvar, H5T_NATIVE_DOUBLE, memspace, filespace, plist, y);
-
   H5Pclose(plist);
   H5Sclose(filespace);
   H5Sclose(memspace);
   H5Dclose(dimvar);
+#endif
 
   if(! mpirank) printf("Creating z dimension...\n");
 
@@ -244,9 +257,13 @@ int main(int argc, char* argv[])
   dimvar = H5Dcreate(fileid, ZNAME, H5T_NATIVE_DOUBLE, filespace,
                      H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   H5DSset_scale(dimvar, ZNAME);
+  H5Dclose(dimvar);
+  H5Sclose(filespace);
 
+#ifdef OLD_WRITE_PATTERN
   if(! mpirank) printf("Writing z dimension...\n");
-
+  dimvar = H5Dopen(fileid, ZNAME, H5P_DEFAULT);
+  filespace = H5Dget_space(dimvar);
   memspace = H5Screate_simple(1, size, 0);
   plist = H5Pcreate(H5P_DATASET_XFER);
   H5Pset_dxpl_mpio(plist, H5FD_MPIO_COLLECTIVE);
@@ -254,11 +271,11 @@ int main(int argc, char* argv[])
   count[0] = ZSIZE;
   H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, 0, count, 0);
   H5Dwrite(dimvar, H5T_NATIVE_DOUBLE, memspace, filespace, plist, z);
-
   H5Pclose(plist);
   H5Sclose(filespace);
   H5Sclose(memspace);
   H5Dclose(dimvar);
+#endif
 
   if(! mpirank) printf("Defining variables...\n");
 
@@ -302,6 +319,68 @@ int main(int argc, char* argv[])
     H5Sclose(filespace);
     H5Dclose(varid);
   }
+
+#ifndef OLD_WRITE_PATTERN
+  if(! mpirank) printf("Writing time dimension...\n");
+  start[0] = 0;
+  count[0] = 1;
+  dimvar = H5Dopen(fileid, TNAME, H5P_DEFAULT);
+  filespace = H5Dget_space(dimvar);
+  memspace = H5Screate_simple(1, count, 0);
+  plist = H5Pcreate(H5P_DATASET_XFER);
+  H5Pset_dxpl_mpio(plist, H5FD_MPIO_COLLECTIVE); // TODO: Pism does this, but comments suggest it is questionable
+  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, 0, count, 0);
+  H5Dwrite(dimvar, H5T_NATIVE_DOUBLE, memspace, filespace, plist, &t);
+  H5Pclose(plist);
+  H5Sclose(filespace);
+  H5Sclose(memspace);
+  H5Dclose(dimvar);
+
+  if(! mpirank) printf("Writing x dimension...\n");
+  start[0] = 0;
+  count[0] = XSIZE;
+  dimvar = H5Dopen(fileid, XNAME, H5P_DEFAULT);
+  filespace = H5Dget_space(dimvar);
+  memspace = H5Screate_simple(1, count, 0);
+  plist = H5Pcreate(H5P_DATASET_XFER);
+  H5Pset_dxpl_mpio(plist, H5FD_MPIO_COLLECTIVE);
+  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, 0, count, 0);
+  H5Dwrite(dimvar, H5T_NATIVE_DOUBLE, memspace, filespace, plist, x);
+  H5Pclose(plist);
+  H5Sclose(filespace);
+  H5Sclose(memspace);
+  H5Dclose(dimvar);
+
+  if(! mpirank) printf("Writing y dimension...\n");
+  start[0] = 0;
+  count[0] = YSIZE;
+  dimvar = H5Dopen(fileid, YNAME, H5P_DEFAULT);
+  filespace = H5Dget_space(dimvar);
+  memspace = H5Screate_simple(1, count, 0);
+  plist = H5Pcreate(H5P_DATASET_XFER);
+  H5Pset_dxpl_mpio(plist, H5FD_MPIO_COLLECTIVE);
+  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, 0, count, 0);
+  H5Dwrite(dimvar, H5T_NATIVE_DOUBLE, memspace, filespace, plist, y);
+  H5Pclose(plist);
+  H5Sclose(filespace);
+  H5Sclose(memspace);
+  H5Dclose(dimvar);
+
+  if(! mpirank) printf("Writing z dimension...\n");
+  start[0] = 0;
+  count[0] = ZSIZE;
+  dimvar = H5Dopen(fileid, ZNAME, H5P_DEFAULT);
+  filespace = H5Dget_space(dimvar);
+  memspace = H5Screate_simple(1, count, 0);
+  plist = H5Pcreate(H5P_DATASET_XFER);
+  H5Pset_dxpl_mpio(plist, H5FD_MPIO_COLLECTIVE);
+  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, 0, count, 0);
+  H5Dwrite(dimvar, H5T_NATIVE_DOUBLE, memspace, filespace, plist, z);
+  H5Pclose(plist);
+  H5Sclose(filespace);
+  H5Sclose(memspace);
+  H5Dclose(dimvar);
+#endif
 
   if(! mpirank) printf("Writing variable data...\n");
 
