@@ -154,6 +154,9 @@ int main(int argc, char* argv[])
     }
   }
 
+  MPI_Info_create(&mpiinfo);
+  MPI_Info_set(mpiinfo, "use_pism_customizations", "1");
+
   if(! mpirank) printf("Creating NetCDF file...\n");
 
   ncresult = ncmpi_create(mpicomm, filename, NC_64BIT_DATA, mpiinfo, &ncid);
