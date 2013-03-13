@@ -144,7 +144,7 @@ int main(int argc, char* argv[])
     for(iy = 0; iy < localheight; iy++)
     {
       y[iy] = iy + localy;
-      data2d[ix*localheight + iy] = (ix+localx)*localheight + iy+localy;
+      data2d[ix*localheight + iy] = (ix+localx)*YSIZE + iy+localy;
       for(iz = 0; iz < ZSIZE; iz++)
       {
         z[iz] = iz;
