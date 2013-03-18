@@ -9,13 +9,20 @@
 
 
 import numpy
+import pyproj
 
 
 class CresisGrid:
 
     def __init__(self, filename):
         self.filename = filename
-        self.readHeader()
+        self.readMetadata()
+
+    def getCRS(self):
+        # TODO: parse the crs out of a prj file
+        return pyproj.Proj('+proj=stere +lat_ts=70 +lat_0=90 +lon_0=-45 ' +
+                           '+k_0=1.0 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84')
+
 
     def getMinX(self):
         return self.xllcorner
@@ -29,7 +36,7 @@ class CresisGrid:
     def getMaxY(self):
         return self.yllcorner + self.cellsize*(self.nrows - 1)
 
-    def readHeader(self):
+    def readMetadata(self):
         self.ncols = None
         self.nrows = None
         self.xllcorner = None

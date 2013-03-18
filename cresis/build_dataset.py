@@ -9,11 +9,13 @@
 
 
 from cresis_grid import CresisGrid
+from searise_grid import SeariseGrid
 
 import getopt
 import netCDF4
 import numpy
 import os
+import pyproj
 import sys
 
 
@@ -99,6 +101,42 @@ def createOutfile(outfile, thkgrids, topggrids):
     root.close()
 
 
+def fillGaps(datafile, fillfile):
+    root = netCDF4.Dataset(outfile, 'a', format='NETCDF3_CLASSIC')
+    searise = SeariseGrid(fillfile)
+    x = root.variables['x']
+    y = root.variables['y']
+    thk = root.variables['thk'][:]
+    thkfill = -9999.0 # TODO: use _FillValue attribute
+    topg = root.variables['topg'][:]
+    topgfill = -9999.0 # TODO: use _FillValue attribute
+
+    seariseCRS = searise.getCRS()
+    cresisCRS = pyproj.Proj('+proj=stere +lat_ts=70 +lat_0=90 +lon_0=-45 ' +
+                            '+k_0=1.0 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84')
+
+    for xi in range(len(x)):
+        print xi, len(x)
+        for yi in range(len(y)):
+            if thk.mask[yi,xi] or topg.mask[yi,xi]:
+                sx, sy = pyproj.transform(cresisCRS, seariseCRS, x[xi], y[yi])
+
+            #if thk.mask[yi,xi]:
+            #    thk[yi,xi] = searise.interp('thk', sx, sy)
+            #    thk.mask[yi,xi] = False
+
+            if topg.mask[yi,xi]:
+                i = searise.interp('topg', sx, sy)
+                if i != -9999.0:
+                    topg[yi,xi] = i
+                    topg.mask[yi,xi] = False
+
+    root.variables['thk'][:] = thk
+    root.variables['topg'][:] = topg
+
+    root.close()
+
+
 def addTopgGridToOutput(outfile, cresisGrid):
     root = netCDF4.Dataset(outfile, 'a', format='NETCDF3_CLASSIC')
     topg = root.variables['topg']
@@ -107,14 +145,17 @@ def addTopgGridToOutput(outfile, cresisGrid):
 if __name__ == '__main__':
     indir = '.'
     outfile = './out.nc'
-    opts, remainder = getopt.getopt(sys.argv[1:], 'i:o:')
+    fillfile = './Greenland1km.nc'
+    opts, remainder = getopt.getopt(sys.argv[1:], 'i:o:f:')
     for opt, arg in opts:
         if opt == '-i':
             indir = arg
-            pass
+
         elif opt == '-o':
             outfile = arg
-            pass
+
+        elif opt == '-f':
+            fillfile = arg
 
     # HACK: there is a little overlap between the Jakobshavn and NWCoast data in
     # Greenland, and it looks like Jakobshavn has better data in the region of
@@ -124,3 +165,4 @@ if __name__ == '__main__':
     topggrids = reversed([CresisGrid(topgfile) for topgfile in findTopgFiles(indir)])
 
     createOutfile(outfile, thkgrids, topggrids)
+    fillGaps(outfile, fillfile)
