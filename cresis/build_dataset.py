@@ -12,6 +12,7 @@ from cresis_grid import CresisGrid
 from searise_grid import SeariseGrid
 
 import getopt
+import math
 import netCDF4
 import numpy
 import os
@@ -47,7 +48,7 @@ def findTopgFiles(indir):
     return topgfiles
 
 
-def createOutfile(outfile, thkgrids, topggrids):
+def createOutfile(outfile, thkgrids, topggrids, fillgrid):
     # Assuming that all grids have the same resolution, and that the thk,topg
     # grids overlap perfectly.
 
@@ -58,6 +59,10 @@ def createOutfile(outfile, thkgrids, topggrids):
     ymax = -sys.float_info.max
     yres = 0.0
 
+    cresiscrs = None
+    searisecrs = fillgrid.getCRS()
+
+    print thkgrids, len(thkgrids)
     for grid in thkgrids:
         xmin = min(xmin, grid.getMinX())
         xmax = max(xmax, grid.getMaxX())
@@ -65,6 +70,23 @@ def createOutfile(outfile, thkgrids, topggrids):
         ymin = min(ymin, grid.getMinY())
         ymax = max(ymax, grid.getMaxY())
         yres = grid.cellsize
+        cresiscrs = grid.getCRS()
+    print thkgrids, len(thkgrids)
+
+    searisebounds = [(fillgrid.getMinX(), fillgrid.getMinY()),
+                     (fillgrid.getMinX(), fillgrid.getMaxY()),
+                     (fillgrid.getMaxX(), fillgrid.getMinY()),
+                     (fillgrid.getMaxX(), fillgrid.getMaxY())]
+    for pt in searisebounds:
+        cx, cy = pyproj.transform(searisecrs, cresiscrs, pt[0], pt[1])
+        if cx < xmin:
+            xmin -= math.ceil((xmin - cx) / xres) * xres
+        if cx > xmax:
+            xmax += math.ceil((cx - xmax) / xres) * xres
+        if cy < ymin:
+            ymin -= math.ceil((ymin - cy) / yres) * yres
+        if cy > ymax:
+            ymax += math.ceil((cy - ymax) / yres) * yres
 
     root = netCDF4.Dataset(outfile, 'w', format='NETCDF3_CLASSIC')
 
@@ -88,6 +110,7 @@ def createOutfile(outfile, thkgrids, topggrids):
         xn = int((grid.getMaxX() - grid.getMinX()) / xres) + 1
         ys = int((grid.getMinY() - ymin) / yres)
         yn = int((grid.getMaxY() - grid.getMinY()) / yres) + 1
+        print xs, xn, ys, yn
         thk[ys:ys+yn, xs:xs+xn] = data
 
     for grid in topggrids:
@@ -96,6 +119,7 @@ def createOutfile(outfile, thkgrids, topggrids):
         xn = int((grid.getMaxX() - grid.getMinX()) / xres) + 1
         ys = int((grid.getMinY() - ymin) / yres)
         yn = int((grid.getMaxY() - grid.getMinY()) / yres) + 1
+        print xs, xn, ys, yn
         topg[ys:ys+yn, xs:xs+xn] = data
 
     root.close()
@@ -121,9 +145,11 @@ def fillGaps(datafile, fillfile):
             if thk.mask[yi,xi] or topg.mask[yi,xi]:
                 sx, sy = pyproj.transform(cresisCRS, seariseCRS, x[xi], y[yi])
 
-            #if thk.mask[yi,xi]:
-            #    thk[yi,xi] = searise.interp('thk', sx, sy)
-            #    thk.mask[yi,xi] = False
+            if thk.mask[yi,xi]:
+                i = searise.interp('thk', sx, sy)
+                if i != -9999.0:
+                    thk[yi,xi] = i
+                    thk.mask[yi,xi] = False
 
             if topg.mask[yi,xi]:
                 i = searise.interp('topg', sx, sy)
@@ -131,16 +157,22 @@ def fillGaps(datafile, fillfile):
                     topg[yi,xi] = i
                     topg.mask[yi,xi] = False
 
+        if xi > 0 and xi % 10 == 0:
+            print 'saving progress...'
+            root.variables['thk'][:] = thk
+            root.variables['topg'][:] = topg
+            root.close()
+            root = netCDF4.Dataset(outfile, 'a', format='NETCDF3_CLASSIC')
+            x = root.variables['x']
+            y = root.variables['y']
+            thk = root.variables['thk'][:]
+            topg = root.variables['topg'][:]
+
     root.variables['thk'][:] = thk
     root.variables['topg'][:] = topg
 
     root.close()
 
-
-def addTopgGridToOutput(outfile, cresisGrid):
-    root = netCDF4.Dataset(outfile, 'a', format='NETCDF3_CLASSIC')
-    topg = root.variables['topg']
-    data = cresisGrid.readData()
 
 if __name__ == '__main__':
     indir = '.'
@@ -161,8 +193,9 @@ if __name__ == '__main__':
     # Greenland, and it looks like Jakobshavn has better data in the region of
     # overlap.  By reversing these lists, we ensure that we put the Jako data
     # into the aggregate file after NWCoast, so we overwrite the NWCoast data.
-    thkgrids = reversed([CresisGrid(thkfile) for thkfile in findThkFiles(indir)])
-    topggrids = reversed([CresisGrid(topgfile) for topgfile in findTopgFiles(indir)])
+    thkgrids = [i for i in reversed([CresisGrid(thkfile) for thkfile in findThkFiles(indir)])]
+    topggrids = [i for i in reversed([CresisGrid(topgfile) for topgfile in findTopgFiles(indir)])]
+    fillgrid = SeariseGrid(fillfile)
 
-    createOutfile(outfile, thkgrids, topggrids)
+    createOutfile(outfile, thkgrids, topggrids, fillgrid)
     fillGaps(outfile, fillfile)

@@ -8,6 +8,7 @@
 #
 
 
+import math
 import netCDF4
 import numpy
 import pyproj
@@ -39,45 +40,40 @@ class SeariseGrid:
         return self.maxy
 
     def interp(self, varname, x, y):
-        if not 'x' in self.cachedvars:
-            self.cachedvars['x'] = self.readVar('x')
-        if not 'y' in self.cachedvars:
-            self.cachedvars['y'] = self.readVar('y')
         if not varname in self.cachedvars:
             self.cachedvars[varname] = self.readVar(varname)
 
-        xvar = self.cachedvars['x']
-        yvar = self.cachedvars['y']
         var = self.cachedvars[varname]
 
-        xi1 = None
-        xi2 = None
-        yi1 = None
-        yi2 = None
-        for i in range(1, len(xvar)):
-            if xvar[i-1] <= x and x <= xvar[i]:
-                xi1, xi2 = i-1, i
-                x1, x2 = xvar[xi1], xvar[xi2]
-
-        for i in range(1, len(yvar)):
-            if yvar[i-1] <= y and y <= yvar[i]:
-                yi1, yi2 = i-1, i
-                y1, y2 = yvar[yi1], yvar[yi2]
-
         value = -9999.0
-        if (xi1 is not None and
-            xi2 is not None and
-            yi1 is not None and
-            yi2 is not None):
-            #print xi1, xi2, yi1, yi2, len(var)
+        if self.minx <= x and x <= self.maxx and self.miny <= y and y <= self.maxy:
+            # HACK: we are assuming a constant spacing of grid points, because
+            # it is faster than looking through the x/y coordinate arrays, and
+            # because all the searise datasets I've seen have constant spacing
+            
+            xstep = (self.maxx - self.minx) / (self.nx - 1)
+            xp = (x - self.minx) / xstep
+            xi1 = int(math.floor(xp))
+            xi2 = int(math.ceil(xp))
+            x1 = self.minx + xi1 * xstep
+            x2 = self.minx + xi2 * xstep
+
+            ystep = (self.maxy - self.miny) / (self.ny - 1)
+            yp = (y - self.miny) / ystep
+            yi1 = int(math.floor(yp))
+            yi2 = int(math.ceil(yp))
+            y1 = self.miny + yi1 * ystep
+            y2 = self.miny + yi2 * ystep
+
+            #print xi1, xi2, yi1, yi2
             values = [var[0, yi1, xi1],
                       var[0, yi1, xi2],
                       var[0, yi2, xi2],
                       var[0, yi2, xi1]]
             weights = [((x2-x)*(y2-y))/((x2-x1)*(y2-y1)),
-                       ((x2-x)*(y-y1))/((x2-x1)*(y2-y1)),
+                       ((x-x1)*(y2-y))/((x2-x1)*(y2-y1)),
                        ((x-x1)*(y-y1))/((x2-x1)*(y2-y1)),
-                       ((x-x1)*(y2-y))/((x2-x1)*(y2-y1))]
+                       ((x2-x)*(y-y1))/((x2-x1)*(y2-y1))]
             value = 0.0
             for i in range(4):
                 value += values[i] * weights[i]
