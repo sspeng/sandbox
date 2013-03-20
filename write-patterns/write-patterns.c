@@ -179,7 +179,7 @@ int main(int argc, char* argv[]) {
     if(0 == mpirank) printf("Writing data...\n");
     // assuming that buflen % stripesize == 0:
     for(i = 0; i < buflen / stripesize; i++) {
-      fileoffset = i * stripecount * stripesize + mpirank * stripesize;
+      fileoffset = i * mpisize * stripesize + mpirank * stripesize;
       bufoffset = i * stripesize;
 
 #ifdef USE_MPIIO
